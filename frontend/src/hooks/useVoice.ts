@@ -131,7 +131,10 @@ export function useVoice(
     for (let i = 0; i < buf.length; i++) {
       sum += Math.abs((buf[i] ?? 128) - 128);
     }
-    waveformHistoryRef.current.push(sum / buf.length / 128);
+    const AMPLITUDE_SCALE = 5;
+    waveformHistoryRef.current.push(
+      Math.min(1, (sum / buf.length / 128) * AMPLITUDE_SCALE),
+    );
   }, []);
 
   const startTimerInterval = useCallback(() => {
