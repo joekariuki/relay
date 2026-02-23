@@ -14,6 +14,7 @@ export function VoiceRecorder({
   if (isProcessing) {
     return (
       <button
+        type="button"
         disabled
         className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center"
         title="Processing voice..."
@@ -44,6 +45,7 @@ export function VoiceRecorder({
   if (isRecording) {
     return (
       <button
+        type="button"
         onClick={onStop}
         className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center animate-pulse transition-colors"
         title="Stop recording"
@@ -57,6 +59,7 @@ export function VoiceRecorder({
 
   return (
     <button
+      type="button"
       onClick={onStart}
       className="w-10 h-10 rounded-full bg-gray-100 hover:bg-relay-50 flex items-center justify-center transition-colors"
       title="Start voice recording"
