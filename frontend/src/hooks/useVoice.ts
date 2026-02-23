@@ -3,13 +3,18 @@ import { sendVoiceMessage } from "../api";
 import type { ChatMessage, RecordingState, VoiceMetadata } from "../types";
 
 
-// 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Generate a unique ID for each voice message (user + assistant pair). */
 let voiceMsgCounter = 0;
 function nextId(): string {
   voiceMsgCounter += 1;
   return `voice_${voiceMsgCounter}_${Date.now()}`;
 }
 
+/** Reduce a variable-length amplitude array to `count` buckets by averaging. */
 function downsample(data: number[], count: number): number[] {
   if (data.length === 0) return Array.from({ length: count }, () => 0);
   if (data.length <= count) return data;
@@ -27,6 +32,7 @@ function downsample(data: number[], count: number): number[] {
   return result;
 }
 
+/** Decode a base64-encoded MP3 from the TTS API and play it back. */
 function playTtsAudio(base64: string): void {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -41,7 +47,6 @@ function playTtsAudio(base64: string): void {
   });
   audio.onended = () => URL.revokeObjectURL(url);
 }
-
 
 export function useVoice(
   accountId: string,
