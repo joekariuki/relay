@@ -9,6 +9,7 @@ interface Props {
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
+  onStopAndSend: () => void;
   onPlay: () => void;
   onStopPlay: () => void;
   onDelete: () => void;
@@ -29,6 +30,7 @@ export function RecordingPanel({
   onPause,
   onResume,
   onStop,
+  onStopAndSend,
   onPlay,
   onStopPlay,
   onDelete,
@@ -77,17 +79,6 @@ export function RecordingPanel({
           </svg>
         </button>
 
-        {/* Live waveform */}
-        <WaveformCanvas getAnalyserData={getAnalyserData} isActive={true} />
-
-        {/* Timer */}
-        <span className="text-sm font-mono text-gray-600 flex-shrink-0">
-          {formatTime(recordingState.elapsed)}
-        </span>
-
-        {/* Recording indicator */}
-        <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-
         {/* Stop button */}
         <button
           type="button"
@@ -97,6 +88,24 @@ export function RecordingPanel({
         >
           <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
             <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        </button>
+
+        {/* Live waveform + timer */}
+        <WaveformCanvas getAnalyserData={getAnalyserData} isActive={true} />
+        <span className="text-sm font-mono text-gray-600 flex-shrink-0">
+          {formatTime(recordingState.elapsed)}
+        </span>
+
+        {/* Quick send button */}
+        <button
+          type="button"
+          onClick={onStopAndSend}
+          className="w-10 h-10 rounded-full bg-relay-600 hover:bg-relay-700 flex items-center justify-center transition-colors flex-shrink-0"
+          title="Send voice message"
+        >
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
           </svg>
         </button>
       </div>
@@ -118,16 +127,6 @@ export function RecordingPanel({
           </svg>
         </button>
 
-        {/* Frozen waveform */}
-        <div className="flex-1 min-w-0 opacity-60">
-          <WaveformCanvas getAnalyserData={getAnalyserData} isActive={false} />
-        </div>
-
-        {/* Blinking timer */}
-        <span className="text-sm font-mono text-gray-600 animate-pulse flex-shrink-0">
-          {formatTime(recordingState.elapsed)}
-        </span>
-
         {/* Stop button */}
         <button
           type="button"
@@ -137,6 +136,26 @@ export function RecordingPanel({
         >
           <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
             <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        </button>
+
+        {/* Frozen waveform + blinking timer */}
+        <div className="flex-1 min-w-0 flex items-center gap-2 opacity-60">
+          <WaveformCanvas getAnalyserData={getAnalyserData} isActive={false} />
+          <span className="text-sm font-mono text-gray-600 animate-pulse flex-shrink-0">
+            {formatTime(recordingState.elapsed)}
+          </span>
+        </div>
+
+        {/* Quick send button */}
+        <button
+          type="button"
+          onClick={onStopAndSend}
+          className="w-10 h-10 rounded-full bg-relay-600 hover:bg-relay-700 flex items-center justify-center transition-colors flex-shrink-0"
+          title="Send voice message"
+        >
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
           </svg>
         </button>
       </div>
@@ -204,6 +223,5 @@ export function RecordingPanel({
     );
   }
 
-  // idle — shouldn't render this component, but return null as fallback
   return null;
 }

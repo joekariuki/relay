@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { sendVoiceMessage } from "../api";
 import type { ChatMessage, VoiceMetadata } from "../types";
 
@@ -90,6 +90,9 @@ export function useVoice(
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(0);
   const timerStartRef = useRef(0);
+
+  // Auto-send flag for stopAndSend flow
+  const autoSendRef = useRef(false);
 
   // Waveform history: one amplitude sample per ~100ms tick
   const waveformHistoryRef = useRef<number[]>([]);
@@ -373,6 +376,19 @@ export function useVoice(
     }
   }, [recordingState, accountId, onMessages, onError]);
 
+  const stopAndSend = useCallback(() => {
+    autoSendRef.current = true;
+    stopRecording();
+  }, [stopRecording]);
+
+  // Auto-send: when stopAndSend transitions through preview, send immediately
+  useEffect(() => {
+    if (recordingState.status === "preview" && autoSendRef.current) {
+      autoSendRef.current = false;
+      void sendRecording();
+    }
+  }, [recordingState, sendRecording]);
+
   // ---- backward-compatible derived state ----
   const isRecording =
     recordingState.status === "recording" ||
@@ -397,5 +413,6 @@ export function useVoice(
     playPreview,
     stopPreview,
     sendRecording,
+    stopAndSend,
   };
 }

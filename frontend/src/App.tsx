@@ -49,6 +49,7 @@ function App() {
     playPreview,
     stopPreview,
     sendRecording,
+    stopAndSend,
   } = useVoice(accountId, handleVoiceMessages, handleVoiceError);
 
   const isActive = recordingState.status !== "idle";
@@ -126,6 +127,7 @@ function App() {
               onPause={pauseRecording}
               onResume={resumeRecording}
               onStop={stopRecording}
+              onStopAndSend={stopAndSend}
               onPlay={playPreview}
               onStopPlay={stopPreview}
               onDelete={deleteRecording}
