@@ -43,6 +43,7 @@ yarn-error.log*
 
 # Build output
 frontend/dist/
+*.tsbuildinfo
 
 # IDE
 .vscode/
