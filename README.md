@@ -2,7 +2,7 @@
 
 A multilingual AI support agent for mobile money services, built with Claude and OpenAI. Handles customer queries in English, French, and Swahili through text and voice, with a comprehensive evaluation framework for measuring agent reliability.
 
-Relay simulates "DuniaWallet" — a fictional mobile money service modeled after real West African financial platforms — with 8 demo accounts, transaction histories, fee structures, policies, and agent locations across Senegal, Mali, Cote d'Ivoire, and Burkina Faso.
+Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo accounts, transaction histories, fee structures, policies, and agent locations across Senegal, Mali, Cote d'Ivoire, and Burkina Faso.
 
 ## Features
 
@@ -263,3 +263,7 @@ This project is a demo. Here's what a production system handling 10M+ interactio
 **Voice at scale:** Real-time streaming ASR (WebSocket-based) instead of batch transcription, voice activity detection to trim silence, latency budgets per pipeline stage with SLOs, fallback TTS engines for reliability, on-device wake word detection for mobile.
 
 **Evaluation in CI:** Nightly eval runs against the full suite with regression alerts, cost tracking per eval run, human-in-the-loop review for edge cases the automated judges can't resolve, shadow mode to compare new model versions against production before rollout.
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
