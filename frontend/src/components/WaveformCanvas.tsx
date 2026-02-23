@@ -130,18 +130,21 @@ export function WaveformCanvas({
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const barCount = Math.min(
-      frozenData.length,
-      Math.floor(width / (BAR_WIDTH + BAR_GAP)),
-    );
+    const barCount = Math.floor(width / (BAR_WIDTH + BAR_GAP));
     const centerY = height / 2;
     const progress = playbackProgress ?? 0;
     const playedBars = Math.floor(progress * barCount);
+    const dataLen = frozenData.length;
 
     ctx.clearRect(0, 0, width, height);
 
     for (let i = 0; i < barCount; i++) {
-      const amplitude = frozenData[i] ?? 0;
+      // Map bar index to frozenData index (stretch data across full width)
+      const dataIndex = dataLen > 0 ? (i / barCount) * dataLen : 0;
+      const lo = Math.floor(dataIndex);
+      const hi = Math.min(lo + 1, dataLen - 1);
+      const t = dataIndex - lo;
+      const amplitude = ((frozenData[lo] ?? 0) * (1 - t)) + ((frozenData[hi] ?? 0) * t);
       const barHeight = Math.max(MIN_BAR_HEIGHT, amplitude * height);
       const x = i * (BAR_WIDTH + BAR_GAP);
       ctx.fillStyle = i < playedBars ? RELAY_600 : GRAY_300;
