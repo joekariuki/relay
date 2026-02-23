@@ -6,6 +6,7 @@ const MIN_BAR_HEIGHT = 2;
 const RELAY_600 = "#059669";
 const GRAY_300 = "#d1d5db";
 const SAMPLE_INTERVAL_MS = 50;
+const AMPLITUDE_SCALE = 5;
 
 /** Compute RMS amplitude (0–1) from time-domain data centered at 128. */
 function computeAmplitude(rawData: Uint8Array): number {
@@ -14,7 +15,8 @@ function computeAmplitude(rawData: Uint8Array): number {
     const sample = (rawData[i] ?? 128) - 128;
     sum += sample * sample;
   }
-  return Math.sqrt(sum / rawData.length) / 128;
+  const rms = Math.sqrt(sum / rawData.length) / 128;
+  return Math.min(1, rms * AMPLITUDE_SCALE);
 }
 
 interface Props {
