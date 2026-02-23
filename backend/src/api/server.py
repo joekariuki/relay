@@ -130,7 +130,7 @@ async def voice(
 ) -> VoiceResponse:
     """Process a voice message: ASR -> Agent -> optional TTS."""
     try:
-        from src.voice.pipeline import process_voice  # type: ignore[import-untyped]
+        from src.voice.pipeline import process_voice
 
         audio_bytes = await audio.read()
         result = await process_voice(
