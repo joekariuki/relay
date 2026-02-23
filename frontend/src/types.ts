@@ -33,6 +33,19 @@ export interface Account {
 
 export type Language = "auto" | "en" | "fr" | "sw";
 
+export type RecordingState =
+  | { status: "idle" }
+  | { status: "recording"; elapsed: number }
+  | { status: "paused"; elapsed: number }
+  | {
+      status: "preview";
+      blob: Blob;
+      duration: number;
+      objectUrl: string;
+      waveformData: number[];
+    }
+  | { status: "processing" };
+
 export interface ChatApiResponse {
   response: string;
   language_detected: string;

@@ -1,4 +1,4 @@
-import type { RecordingState } from "../hooks/useVoice";
+import type { RecordingState } from "../types";
 import { WaveformCanvas } from "./WaveformCanvas";
 
 interface Props {

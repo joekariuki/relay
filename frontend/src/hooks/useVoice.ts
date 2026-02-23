@@ -1,28 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sendVoiceMessage } from "../api";
-import type { ChatMessage, VoiceMetadata } from "../types";
+import type { ChatMessage, RecordingState, VoiceMetadata } from "../types";
 
-// ---------------------------------------------------------------------------
-// State machine
-// ---------------------------------------------------------------------------
 
-export type RecordingState =
-  | { status: "idle" }
-  | { status: "recording"; elapsed: number }
-  | { status: "paused"; elapsed: number }
-  | {
-      status: "preview";
-      blob: Blob;
-      duration: number;
-      objectUrl: string;
-      waveformData: number[];
-    }
-  | { status: "processing" };
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
+// 
 let voiceMsgCounter = 0;
 function nextId(): string {
   voiceMsgCounter += 1;
@@ -61,9 +42,6 @@ function playTtsAudio(base64: string): void {
   audio.onended = () => URL.revokeObjectURL(url);
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
 
 export function useVoice(
   accountId: string,
