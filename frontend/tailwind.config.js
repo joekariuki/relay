@@ -1,3 +1,5 @@
+import typography from "@tailwindcss/typography";
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -17,7 +19,51 @@ export default {
           900: "#064e3b",
         },
       },
+      typography: {
+        chat: {
+          css: {
+            "--tw-prose-body": "#1f2937",
+            "--tw-prose-headings": "#111827",
+            "--tw-prose-links": "#059669",
+            "--tw-prose-bold": "#111827",
+            "--tw-prose-code": "#059669",
+            "--tw-prose-pre-bg": "#f3f4f6",
+            fontSize: "0.875rem",
+            lineHeight: "1.625",
+            p: {
+              marginTop: "0.25em",
+              marginBottom: "0.25em",
+            },
+            "ul, ol": {
+              marginTop: "0.25em",
+              marginBottom: "0.25em",
+            },
+            li: {
+              marginTop: "0.125em",
+              marginBottom: "0.125em",
+            },
+            h1: { fontSize: "1.125rem" },
+            h2: { fontSize: "1rem" },
+            h3: { fontSize: "0.9375rem" },
+            table: {
+              fontSize: "0.8125rem",
+            },
+            "code::before": { content: "none" },
+            "code::after": { content: "none" },
+            code: {
+              backgroundColor: "#f3f4f6",
+              padding: "0.125rem 0.25rem",
+              borderRadius: "0.25rem",
+              fontWeight: "400",
+            },
+            pre: {
+              borderRadius: "0.5rem",
+              padding: "0.75rem",
+            },
+          },
+        },
+      },
     },
   },
-  plugins: [],
+  plugins: [typography],
 };
