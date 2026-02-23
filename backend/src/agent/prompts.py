@@ -26,7 +26,14 @@ You MUST follow these rules strictly:
 
 10. Handle code-switching gracefully. If the user mixes languages (e.g., French and Wolof, Swahili and English), respond in the dominant language used.
 
-Be concise, friendly, and professional. Greet users warmly and use their name when available from tool results."""
+CURRENT USER CONTEXT:
+- Name: {user_name}
+- Account ID: {account_id}
+- Country: {user_country}
+
+When the user asks about their own account (balance, transactions, etc.), use the account ID above. Do NOT ask the user for their account ID — you already have it.
+
+Be concise, friendly, and professional. Greet users warmly using their name."""
 
 _SYSTEM_PROMPT_FR = """Vous etes un agent de support client pour DuniaWallet, un service de mobile money operant en Afrique de l'Ouest (Senegal, Mali, Cote d'Ivoire et Burkina Faso). Toutes les transactions utilisent le Franc CFA (XOF / FCFA).
 
@@ -52,7 +59,14 @@ Vous DEVEZ suivre strictement ces regles :
 
 10. Gerez le melange de langues avec souplesse. Si l'utilisateur melange les langues, repondez dans la langue dominante utilisee.
 
-Soyez concis, amical et professionnel. Accueillez chaleureusement les utilisateurs et utilisez leur nom lorsqu'il est disponible."""
+CONTEXTE DE L'UTILISATEUR ACTUEL :
+- Nom : {user_name}
+- Identifiant de compte : {account_id}
+- Pays : {user_country}
+
+Lorsque l'utilisateur pose des questions sur son propre compte (solde, transactions, etc.), utilisez l'identifiant de compte ci-dessus. Ne demandez PAS a l'utilisateur son identifiant de compte — vous l'avez deja.
+
+Soyez concis, amical et professionnel. Accueillez chaleureusement les utilisateurs en utilisant leur nom."""
 
 _SYSTEM_PROMPT_SW = """Wewe ni wakala wa huduma kwa wateja wa DuniaWallet, huduma ya pesa ya simu inayofanya kazi Afrika Magharibi (Senegal, Mali, Cote d'Ivoire, na Burkina Faso). Miamala yote inatumia Faranga CFA (XOF / FCFA).
 
@@ -78,7 +92,14 @@ LAZIMA ufuate sheria hizi kwa ukali:
 
 10. Shughulikia kuchanganya lugha kwa urahisi. Ikiwa mtumiaji anachanganya lugha, jibu katika lugha kuu inayotumika.
 
-Kuwa mfupi, rafiki, na mtaalamu. Wasalimie watumiaji kwa joto na utumie jina lao linapopatikana."""
+MUKTADHA WA MTUMIAJI WA SASA:
+- Jina: {user_name}
+- Kitambulisho cha akaunti: {account_id}
+- Nchi: {user_country}
+
+Mtumiaji anapouliza kuhusu akaunti yake (salio, miamala, n.k.), tumia kitambulisho cha akaunti hapo juu. USIULIZE mtumiaji kitambulisho chake — tayari unacho.
+
+Kuwa mfupi, rafiki, na mtaalamu. Wasalimie watumiaji kwa joto kwa kutumia jina lao."""
 
 _PROMPTS: dict[str, str] = {
     "en": _SYSTEM_PROMPT_EN,
@@ -87,9 +108,20 @@ _PROMPTS: dict[str, str] = {
 }
 
 
-def get_system_prompt(language: str = "en") -> str:
-    """Get the system prompt for the given language code.
+def get_system_prompt(
+    language: str = "en",
+    *,
+    user_name: str = "Unknown",
+    account_id: str = "Unknown",
+    user_country: str = "Unknown",
+) -> str:
+    """Get the system prompt for the given language code, with user context.
 
     Defaults to English if the language is not recognized.
     """
-    return _PROMPTS.get(language.lower(), _SYSTEM_PROMPT_EN)
+    template = _PROMPTS.get(language.lower(), _SYSTEM_PROMPT_EN)
+    return template.format(
+        user_name=user_name,
+        account_id=account_id,
+        user_country=user_country,
+    )

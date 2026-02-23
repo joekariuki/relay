@@ -12,6 +12,8 @@ from typing import Any
 
 from src.knowledge.models import AgentResponse, Language, ToolCallRecord
 
+from src.knowledge.accounts import get_account
+
 from .guardrails import check_guardrails
 from .prompts import get_system_prompt
 from .router import LanguageDetectionResult, detect_language, _heuristic_language_detect
@@ -89,7 +91,13 @@ async def process_message(
     metadata["code_switching"] = lang_result.code_switching
 
     # === Stage 3: Build Messages ===
-    system_prompt = get_system_prompt(lang_result.language)
+    account = get_account(account_id)
+    system_prompt = get_system_prompt(
+        lang_result.language,
+        user_name=account.name if account else "Unknown",
+        account_id=account_id,
+        user_country=account.country if account else "Unknown",
+    )
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": message},
     ]
