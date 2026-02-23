@@ -14,6 +14,7 @@ from src.knowledge.models import AgentResponse, Language, ToolCallRecord
 
 from src.knowledge.accounts import get_account
 
+from .formatting import clean_response_text
 from .guardrails import check_guardrails
 from .prompts import get_system_prompt
 from .router import LanguageDetectionResult, detect_language, _heuristic_language_detect
@@ -151,6 +152,8 @@ async def process_message(
 
     latency["agent_processing_ms"] = (time.perf_counter() - t2) * 1000
     latency["total_ms"] = (time.perf_counter() - t0) * 1000
+
+    response_text = clean_response_text(response_text)
 
     return AgentResponse(
         response_text=response_text,
