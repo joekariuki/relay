@@ -5,6 +5,17 @@ const BAR_GAP = 2;
 const MIN_BAR_HEIGHT = 2;
 const RELAY_600 = "#059669";
 const GRAY_300 = "#d1d5db";
+const SAMPLE_INTERVAL_MS = 50;
+
+/** Compute RMS amplitude (0–1) from time-domain data centered at 128. */
+function computeAmplitude(rawData: Uint8Array): number {
+  let sum = 0;
+  for (let i = 0; i < rawData.length; i++) {
+    const sample = (rawData[i] ?? 128) - 128;
+    sum += sample * sample;
+  }
+  return Math.sqrt(sum / rawData.length) / 128;
+}
 
 interface Props {
   /** Called each animation frame in live mode to read time-domain data. */
@@ -29,9 +40,12 @@ export function WaveformCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef(0);
-  const lastBarsRef = useRef<number[]>([]);
 
-  // Live waveform animation loop (recording / paused)
+  // Rolling buffer: each entry is one amplitude sample over time
+  const rollingBufferRef = useRef<number[]>([]);
+  const lastSampleTimeRef = useRef(0);
+
+  // Live rolling waveform (recording / paused)
   useEffect(() => {
     if (frozenData) return;
 
@@ -54,35 +68,33 @@ export function WaveformCanvas({
 
       const barCount = Math.floor(width / (BAR_WIDTH + BAR_GAP));
       const centerY = height / 2;
+      const now = performance.now();
 
+      // Sample new amplitude if active and enough time has elapsed
       if (isActive && getAnalyserData) {
-        const rawData = getAnalyserData();
-        if (rawData && rawData.length > 0) {
-          const samplesPerBar = Math.max(
-            1,
-            Math.floor(rawData.length / barCount),
-          );
-          const bars: number[] = [];
-          for (let i = 0; i < barCount; i++) {
-            let sum = 0;
-            for (let j = 0; j < samplesPerBar; j++) {
-              const idx = i * samplesPerBar + j;
-              const sample = idx < rawData.length ? (rawData[idx] ?? 128) : 128;
-              sum += Math.abs(sample - 128);
-            }
-            bars.push(sum / samplesPerBar / 128);
+        if (now - lastSampleTimeRef.current >= SAMPLE_INTERVAL_MS) {
+          const rawData = getAnalyserData();
+          if (rawData && rawData.length > 0) {
+            rollingBufferRef.current.push(computeAmplitude(rawData));
           }
-          lastBarsRef.current = bars;
+          lastSampleTimeRef.current = now;
         }
       }
 
-      ctx.clearRect(0, 0, width, height);
-      const bars = lastBarsRef.current;
+      // Trim buffer to fit canvas
+      const buffer = rollingBufferRef.current;
+      if (buffer.length > barCount) {
+        buffer.splice(0, buffer.length - barCount);
+      }
 
-      for (let i = 0; i < bars.length; i++) {
-        const amplitude = bars[i] ?? 0;
+      // Draw bars right-aligned (newest on right)
+      ctx.clearRect(0, 0, width, height);
+      const offset = barCount - buffer.length;
+
+      for (let i = 0; i < buffer.length; i++) {
+        const amplitude = buffer[i] ?? 0;
         const barHeight = Math.max(MIN_BAR_HEIGHT, amplitude * height);
-        const x = i * (BAR_WIDTH + BAR_GAP);
+        const x = (offset + i) * (BAR_WIDTH + BAR_GAP);
         ctx.fillStyle = RELAY_600;
         ctx.fillRect(x, centerY - barHeight / 2, BAR_WIDTH, barHeight);
       }

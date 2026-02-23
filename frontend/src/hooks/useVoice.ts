@@ -161,8 +161,8 @@ export function useVoice(
         await audioCtx.resume();
       }
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.8;
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
       const source = audioCtx.createMediaStreamSource(stream);
       source.connect(analyser);
       // Do NOT connect to destination — no feedback loop
