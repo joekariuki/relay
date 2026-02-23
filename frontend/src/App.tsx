@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { AccountSelector } from "./components/AccountSelector";
 import { ChatWindow } from "./components/ChatWindow";
 import { LanguageSelector } from "./components/LanguageSelector";
+import { RecordingPanel } from "./components/RecordingPanel";
 import { SampleQueries } from "./components/SampleQueries";
 import { VoiceRecorder } from "./components/VoiceRecorder";
 import { useChat } from "./hooks/useChat";
@@ -24,8 +25,6 @@ function App() {
 
   const handleVoiceMessages = useCallback(
     (userMsg: ChatMessage, assistantMsg: ChatMessage) => {
-      // We need to add messages externally — a bit of a bridge
-      // between useVoice and useChat. We'll use a workaround.
       setVoiceMessages((prev) => [...prev, userMsg, assistantMsg]);
     },
     [],
@@ -35,11 +34,25 @@ function App() {
     setVoiceMessages((prev) => [...prev, errorMsg]);
   }, []);
 
-  // Voice messages merged with chat messages
   const [voiceMessages, setVoiceMessages] = useState<ChatMessage[]>([]);
 
-  const { isRecording, isProcessing, startRecording, stopRecording } =
-    useVoice(accountId, handleVoiceMessages, handleVoiceError);
+  const {
+    recordingState,
+    isPlaying,
+    playbackProgress,
+    getAnalyserData,
+    startRecording,
+    pauseRecording,
+    resumeRecording,
+    stopRecording,
+    deleteRecording,
+    playPreview,
+    stopPreview,
+    sendRecording,
+  } = useVoice(accountId, handleVoiceMessages, handleVoiceError);
+
+  const isActive = recordingState.status !== "idle";
+  const isProcessing = recordingState.status === "processing";
 
   const allMessages = [...messages, ...voiceMessages].sort(
     (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
@@ -103,38 +116,51 @@ function App() {
 
       {/* Input bar */}
       <div className="border-t border-gray-200 bg-white px-4 py-3">
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-3xl mx-auto flex items-center gap-2"
-        >
-          <VoiceRecorder
-            isRecording={isRecording}
-            isProcessing={isProcessing}
-            onStart={startRecording}
-            onStop={stopRecording}
-          />
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
-            disabled={isLoading || isRecording || isProcessing}
-            className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-relay-500 focus:border-transparent disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isLoading || isRecording || isProcessing}
-            className="w-10 h-10 rounded-full bg-relay-600 hover:bg-relay-700 disabled:bg-gray-200 flex items-center justify-center transition-colors"
-          >
-            <svg
-              className="w-5 h-5 text-white"
-              fill="currentColor"
-              viewBox="0 0 24 24"
+        <div className="max-w-3xl mx-auto">
+          {isActive ? (
+            <RecordingPanel
+              recordingState={recordingState}
+              isPlaying={isPlaying}
+              playbackProgress={playbackProgress}
+              getAnalyserData={getAnalyserData}
+              onPause={pauseRecording}
+              onResume={resumeRecording}
+              onStop={stopRecording}
+              onPlay={playPreview}
+              onStopPlay={stopPreview}
+              onDelete={deleteRecording}
+              onSend={sendRecording}
+            />
+          ) : (
+            <form
+              onSubmit={handleSubmit}
+              className="flex items-center gap-2"
             >
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-            </svg>
-          </button>
-        </form>
+              <VoiceRecorder onStart={startRecording} />
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Type a message..."
+                disabled={isLoading}
+                className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-relay-500 focus:border-transparent disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="w-10 h-10 rounded-full bg-relay-600 hover:bg-relay-700 disabled:bg-gray-200 flex items-center justify-center transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 text-white"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
