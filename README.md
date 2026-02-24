@@ -7,6 +7,7 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 ## Features
 
 - **Tool-use agent** — Claude Sonnet via Pydantic AI orchestrates 7 tools (balance checks, transactions, fees, agent lookup, policies, support tickets) through a multi-turn conversation loop
+- **Streaming responses** — Server-Sent Events (SSE) via pydantic-ai's `run_stream()` deliver tokens progressively for real-time chat UX
 - **Multilingual support** — English, French, and Swahili with automatic language detection and code-switching handling (e.g. "Nataka ku-check balance yangu")
 - **Voice pipeline** — Whisper ASR for speech-to-text, language-specific TTS voices (alloy/nova/echo), full latency tracking at every stage
 - **Evaluation framework** — 100+ curated test cases scored across 4 dimensions: groundedness, hallucination detection, compliance, and language quality
@@ -20,8 +21,8 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 
 ```
 ┌──────────┐     ┌────────────┐     ┌───────────────┐     ┌──────────────┐     ┌──────────┐
-│  User    │────>│ Guardrails │────>│   Language     │────>│ Claude       │────>│ Response │
-│  Message │     │ (regex)    │     │   Detection    │     │ Tool Loop    │     │          │
+│  User    │────>│ Guardrails │────>│   Language     │────>│ Claude       │─SSE>│ Response │
+│  Message │     │ (regex)    │     │   Detection    │     │ Tool Loop    │     │ (stream) │
 └──────────┘     └────────────┘     │ (Haiku/heur.) │     │ (max 5 rds)  │     └──────────┘
                   flags, doesn't     └───────────────┘     │              │
                   hard-block              │                │  ┌─────────┐ │
@@ -165,6 +166,7 @@ Open **http://localhost:5173** — the Vite dev server proxies `/api/*` requests
 |--------|------|-------------|
 | `GET` | `/health` | Health check with version and environment |
 | `POST` | `/chat` | Text message → agent response with tool calls and latency |
+| `POST` | `/chat/stream` | SSE streaming — tokens delivered progressively via `text_delta` events |
 | `POST` | `/voice` | Audio upload (multipart) → ASR → agent → optional TTS |
 | `POST` | `/eval` | Run evaluation suite (optional: `category`, `max_cases`) |
 
@@ -250,7 +252,7 @@ Key architectural choices are documented in [docs/design-decisions.md](docs/desi
 
 - **Pydantic AI** over direct Anthropic SDK — provider-agnostic model swapping, auto-generated tool schemas from type hints, `@agent.tool` decorators replace ~170 lines of manual JSON schema
 - **Pydantic AI** over LangChain/LangGraph — lightweight, Pydantic-native, slim dependency footprint, transparent tool-use loop via `usage_limits`
-- **REST API** over GraphQL — small API surface (4 endpoints), simpler for file uploads
+- **REST API** over GraphQL — small API surface (5 endpoints), simpler for file uploads
 - **Custom eval framework** over Promptfoo — domain-specific scoring (financial hallucinations, ID masking), tighter integration with agent pipeline
 - **In-memory data** over database — zero infrastructure, deterministic tests, instant startup
 
@@ -260,7 +262,7 @@ This project is a demo. Here's what a production system handling 10M+ interactio
 
 **Infrastructure:** PostgreSQL/CockroachDB for accounts and transactions, Redis for session state and rate limiting, async task queue (Celery/Temporal) for eval runs, structured observability with OpenTelemetry, Kubernetes for horizontal scaling.
 
-**Agent improvements:** Conversation memory across sessions, streaming responses (SSE) for lower perceived latency, A/B testing framework for prompt variants, retrieval-augmented generation (RAG) over a real policy knowledge base instead of hardcoded documents, fine-tuned language detection for low-resource languages.
+**Agent improvements:** Conversation memory across sessions, A/B testing framework for prompt variants, retrieval-augmented generation (RAG) over a real policy knowledge base instead of hardcoded documents, fine-tuned language detection for low-resource languages.
 
 **Voice at scale:** Real-time streaming ASR (WebSocket-based) instead of batch transcription, voice activity detection to trim silence, latency budgets per pipeline stage with SLOs, fallback TTS engines for reliability, on-device wake word detection for mobile.
 
