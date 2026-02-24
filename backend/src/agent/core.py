@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.settings import ModelSettings
+from pydantic_graph import End
 
 from src.config import get_settings
 from src.knowledge.accounts import get_account
@@ -331,7 +332,8 @@ async def process_message_stream(
         deps = AgentDeps(account_id=account_id, language=lang_result.language)
 
         accumulated_text = ""
-        async with support_agent.run_stream(
+        pending_chunks: list[str] = []
+        async with support_agent.iter(
             message,
             deps=deps,
             model=settings.agent_model,
@@ -339,10 +341,23 @@ async def process_message_stream(
             usage_limits=UsageLimits(
                 request_limit=settings.agent_max_tool_rounds + 1,
             ),
-        ) as stream_result:
-            async for chunk in stream_result.stream_text(delta=True, debounce_by=None):
-                accumulated_text += chunk
-                yield _sse_event("text_delta", {"chunk": chunk})
+        ) as agent_run:
+            node = agent_run.next_node
+            while not isinstance(node, End):
+                if support_agent.is_model_request_node(node):
+                    # Buffer this turn's text; discard any previous
+                    # (intermediate) turn so filler like "Let me check…"
+                    # is never shown to the user.
+                    pending_chunks = []
+                    async with node.stream(agent_run.ctx) as stream:
+                        async for chunk in stream.stream_text(delta=True, debounce_by=None):
+                            pending_chunks.append(chunk)
+                node = await agent_run.next(node)
+
+        # Flush the final model turn to the client (cleaned)
+        accumulated_text = clean_response_text("".join(pending_chunks))
+        if accumulated_text:
+            yield _sse_event("text_delta", {"chunk": accumulated_text})
 
         latency["agent_processing_ms"] = (time.perf_counter() - t2) * 1000
         latency["total_ms"] = (time.perf_counter() - t0) * 1000
