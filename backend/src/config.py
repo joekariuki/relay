@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     language_detection_model: str = "claude-haiku-4-5-20241022"
     language_detection_timeout_s: float = 2.0
 
+    # Eval judge model
+    eval_model: str = "anthropic:claude-haiku-4-5-20241022"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
