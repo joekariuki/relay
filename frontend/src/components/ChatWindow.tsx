@@ -5,14 +5,15 @@ import { MessageBubble } from "./MessageBubble";
 interface Props {
   messages: ChatMessage[];
   isLoading: boolean;
+  isStreaming: boolean;
 }
 
-export function ChatWindow({ messages, isLoading }: Props) {
+export function ChatWindow({ messages, isLoading, isStreaming }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isStreaming]);
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4">

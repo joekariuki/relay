@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { sendChatMessage } from "../api";
+import { useCallback, useRef, useState } from "react";
+import { streamChatMessage } from "../api";
 import type { ChatMessage, Language, ResponseMetadata } from "../types";
 
 let messageCounter = 0;
@@ -11,64 +11,93 @@ function nextId(): string {
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [accountId, setAccountId] = useState("acc_001");
   const [language, setLanguage] = useState<Language>("auto");
+  const abortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    (content: string) => {
       const userMsg: ChatMessage = {
         id: nextId(),
         role: "user",
         content,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, userMsg]);
+
+      const assistantId = nextId();
+      const assistantMsg: ChatMessage = {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setIsLoading(true);
 
-      try {
-        const langHint = language === "auto" ? null : language;
-        const result = await sendChatMessage(content, accountId, langHint);
+      const langHint = language === "auto" ? null : language;
 
-        const metadata: ResponseMetadata = {
-          language_detected: result.language_detected,
-          tools_used: result.tools_used,
-          groundedness_score: result.groundedness_score,
-          latency_ms: result.latency_ms,
-        };
-
-        const assistantMsg: ChatMessage = {
-          id: nextId(),
-          role: "assistant",
-          content: result.response,
-          timestamp: new Date(),
-          metadata,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-      } catch (err) {
-        const errorMsg: ChatMessage = {
-          id: nextId(),
-          role: "system",
-          content:
-            err instanceof Error
-              ? err.message
-              : "An unexpected error occurred. Please try again.",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
-      } finally {
-        setIsLoading(false);
-      }
+      abortRef.current = streamChatMessage(content, accountId, langHint, {
+        onTextDelta(chunk) {
+          setIsLoading(false);
+          setIsStreaming(true);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, content: msg.content + chunk }
+                : msg,
+            ),
+          );
+        },
+        onDone(payload) {
+          setIsStreaming(false);
+          const metadata: ResponseMetadata = {
+            language_detected: payload.language_detected,
+            tools_used: payload.tools_used,
+            groundedness_score: payload.groundedness_score,
+            latency_ms: payload.latency_ms,
+          };
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId ? { ...msg, metadata } : msg,
+            ),
+          );
+        },
+        onError(message) {
+          setIsLoading(false);
+          setIsStreaming(false);
+          // Remove the empty assistant placeholder and add error message
+          setMessages((prev) => {
+            const filtered = prev.filter((msg) => msg.id !== assistantId);
+            return [
+              ...filtered,
+              {
+                id: nextId(),
+                role: "system" as const,
+                content: message,
+                timestamp: new Date(),
+              },
+            ];
+          });
+        },
+      });
     },
     [accountId, language],
   );
 
   const clearMessages = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     setMessages([]);
+    setIsLoading(false);
+    setIsStreaming(false);
   }, []);
 
   return {
     messages,
     isLoading,
+    isStreaming,
     accountId,
     language,
     setAccountId,

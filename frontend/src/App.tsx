@@ -13,6 +13,7 @@ function App() {
   const {
     messages,
     isLoading,
+    isStreaming,
     accountId,
     language,
     setAccountId,
@@ -62,7 +63,7 @@ function App() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isLoading || isStreaming) return;
     setInput("");
     void sendMessage(trimmed);
   };
@@ -111,6 +112,7 @@ function App() {
           <ChatWindow
             messages={allMessages}
             isLoading={isLoading || isProcessing}
+            isStreaming={isStreaming}
           />
         )}
       </main>
@@ -144,12 +146,12 @@ function App() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type a message..."
-                disabled={isLoading}
+                disabled={isLoading || isStreaming}
                 className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-relay-500 focus:border-transparent disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || isStreaming}
                 className="w-10 h-10 rounded-full bg-relay-600 hover:bg-relay-700 disabled:bg-gray-200 flex items-center justify-center transition-colors"
               >
                 <svg
