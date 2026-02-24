@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     agent_max_tool_rounds: int = 5
 
     # Language detection settings
-    language_detection_model: str = "claude-haiku-4-5-20241022"
+    language_detection_model: str = "anthropic:claude-haiku-4-5-20241022"
     language_detection_timeout_s: float = 2.0
 
     # Eval judge model

@@ -1,6 +1,6 @@
 """Language detection for incoming user messages.
 
-Uses Claude Haiku for fast, accurate detection with a keyword-based heuristic fallback.
+Uses an LLM via pydantic-ai for fast, accurate detection with a keyword-based heuristic fallback.
 """
 
 from __future__ import annotations
@@ -102,29 +102,25 @@ def _heuristic_language_detect(message: str) -> LanguageDetectionResult:
 
 
 async def detect_language(
-    client: object,
     message: str,
     timeout_s: float = 2.0,
-    model: str = "claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20241022",
 ) -> LanguageDetectionResult:
-    """Detect the language of a user message using Claude Haiku.
+    """Detect the language of a user message using an LLM via pydantic-ai.
 
     Falls back to heuristic detection if the API call fails or times out.
 
     Args:
-        client: Anthropic client instance.
         message: The user message to analyze.
         timeout_s: Timeout in seconds for the API call.
-        model: Model to use for language detection.
+        model: Model to use for language detection (provider:model format).
     """
     import asyncio
 
     try:
-        from anthropic import AsyncAnthropic
-
-        if not isinstance(client, AsyncAnthropic):
-            logger.warning("Invalid client type, falling back to heuristic")
-            return _heuristic_language_detect(message)
+        from pydantic_ai import ModelRequest
+        from pydantic_ai.direct import model_request
+        from pydantic_ai.settings import ModelSettings
 
         prompt = (
             "Detect the language of this message. Respond with ONLY a JSON object "
@@ -135,21 +131,17 @@ async def detect_language(
         )
 
         response = await asyncio.wait_for(
-            client.messages.create(
-                model=model,
-                max_tokens=100,
-                messages=[{"role": "user", "content": prompt}],
+            model_request(
+                model,
+                [ModelRequest.user_text_prompt(prompt)],
+                model_settings=ModelSettings(max_tokens=100),
             ),
             timeout=timeout_s,
         )
 
         import json
 
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            logger.warning("Language detection returned non-text block")
-            return _heuristic_language_detect(message)
-        text = first_block.text.strip()
+        text = str(response.parts[0].content).strip()
         # Handle potential markdown code blocks
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

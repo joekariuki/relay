@@ -17,7 +17,7 @@ from src.knowledge.accounts import get_account
 from .formatting import clean_response_text
 from .guardrails import check_guardrails
 from .prompts import get_system_prompt
-from .router import LanguageDetectionResult, detect_language, _heuristic_language_detect
+from .router import LanguageDetectionResult, detect_language
 from .tools import TOOL_DEFINITIONS, execute_tool
 
 logger = logging.getLogger(__name__)
@@ -73,18 +73,15 @@ async def process_message(
             code_switching=False,
             secondary_language=None,
         )
-    elif client is not None:
+    else:
         from src.config import get_settings
 
         settings = get_settings()
         lang_result = await detect_language(
-            client,
             message,
             timeout_s=settings.language_detection_timeout_s,
             model=settings.language_detection_model,
         )
-    else:
-        lang_result = _heuristic_language_detect(message)
 
     latency["language_detection_ms"] = (time.perf_counter() - t1) * 1000
     metadata["language_detected"] = lang_result.language
