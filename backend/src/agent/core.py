@@ -5,8 +5,10 @@ Pipeline: guardrails -> language detection -> prompt selection -> pydantic-ai ag
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -263,3 +265,109 @@ async def process_message(
         latency_ms=latency,
         metadata=metadata,
     )
+
+
+def _sse_event(event: str, data: dict[str, object]) -> str:
+    """Format a Server-Sent Event string."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+async def process_message_stream(
+    message: str,
+    account_id: str = "acc_001",
+    language_hint: str | None = None,
+) -> AsyncIterator[str]:
+    """Process a user message and stream the response as SSE events.
+
+    Yields SSE-formatted strings:
+        - event: text_delta — incremental text chunks
+        - event: done — final metadata (language, tools, latency)
+        - event: error — on failure
+
+    Args:
+        message: The user's message text.
+        account_id: The DuniaWallet account ID for context.
+        language_hint: Optional language hint ("en", "fr", "sw").
+    """
+    settings = get_settings()
+    latency: dict[str, float] = {}
+    metadata: dict[str, object] = {}
+
+    try:
+        # === Stage 1: Guardrails ===
+        t0 = time.perf_counter()
+        guardrail_result = check_guardrails(message)
+        latency["guardrails_ms"] = (time.perf_counter() - t0) * 1000
+
+        metadata["guardrail_flags"] = guardrail_result.flags
+        metadata["guardrail_safe"] = guardrail_result.safe
+
+        if guardrail_result.injection_detected:
+            logger.warning(
+                "Injection detected in message",
+                extra={"flags": guardrail_result.flags},
+            )
+
+        # === Stage 2: Language Detection ===
+        t1 = time.perf_counter()
+        if language_hint and language_hint in ("en", "fr", "sw"):
+            lang_result = LanguageDetectionResult(
+                language=language_hint,
+                confidence=1.0,
+                code_switching=False,
+                secondary_language=None,
+            )
+        else:
+            lang_result = await detect_language(
+                message,
+                timeout_s=settings.language_detection_timeout_s,
+                model=settings.language_detection_model,
+            )
+
+        latency["language_detection_ms"] = (time.perf_counter() - t1) * 1000
+
+        # === Stage 3: Stream Agent Response ===
+        t2 = time.perf_counter()
+        deps = AgentDeps(account_id=account_id, language=lang_result.language)
+
+        accumulated_text = ""
+        async with support_agent.run_stream(
+            message,
+            deps=deps,
+            model=settings.agent_model,
+            model_settings=ModelSettings(max_tokens=settings.agent_max_tokens),
+            usage_limits=UsageLimits(
+                request_limit=settings.agent_max_tool_rounds + 1,
+            ),
+        ) as stream_result:
+            async for chunk in stream_result.stream_text(delta=True, debounce_by=None):
+                accumulated_text += chunk
+                yield _sse_event("text_delta", {"chunk": chunk})
+
+        latency["agent_processing_ms"] = (time.perf_counter() - t2) * 1000
+        latency["total_ms"] = (time.perf_counter() - t0) * 1000
+
+        # Build tool call info for the done event
+        tools_info = [
+            {
+                "tool_name": t.tool_name,
+                "arguments": t.arguments,
+                "result": t.result,
+                "duration_ms": t.duration_ms,
+            }
+            for t in deps.tool_records
+        ]
+
+        yield _sse_event("done", {
+            "language_detected": lang_result.language,
+            "tools_used": tools_info,
+            "groundedness_score": None,
+            "latency_ms": latency,
+        })
+
+    except Exception:
+        logger.error("Streaming agent processing failed", exc_info=True)
+        yield _sse_event("error", {
+            "message": "I'm sorry, I encountered an error processing your request. "
+            "Please try again or contact support.",
+        })

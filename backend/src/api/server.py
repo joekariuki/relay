@@ -10,7 +10,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.config import configure_logging, get_settings
 
@@ -127,6 +127,22 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except Exception:
         logger.error("Chat endpoint failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """Stream a chat response as Server-Sent Events."""
+    from src.agent.core import process_message_stream
+
+    return StreamingResponse(
+        process_message_stream(
+            message=request.message,
+            account_id=request.account_id,
+            language_hint=request.language,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/voice", response_model=VoiceResponse)
