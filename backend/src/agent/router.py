@@ -115,9 +115,11 @@ async def detect_language(
         timeout_s: Timeout in seconds for the API call.
         model: Model to use for language detection (provider:model format).
     """
+    # Lazy import: only needed for timeout wrapping in this path
     import asyncio
 
     try:
+        # Lazy import: pydantic-ai direct API used only for lightweight language detection
         from pydantic_ai import ModelRequest
         from pydantic_ai.direct import model_request
         from pydantic_ai.settings import ModelSettings
@@ -139,6 +141,7 @@ async def detect_language(
             timeout=timeout_s,
         )
 
+        # Lazy import: pydantic-ai direct API used only for lightweight language detection
         import json
 
         from pydantic_ai.messages import TextPart
