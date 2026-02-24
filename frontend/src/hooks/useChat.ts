@@ -26,29 +26,37 @@ export function useChat() {
       };
 
       const assistantId = nextId();
-      const assistantMsg: ChatMessage = {
-        id: assistantId,
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-      };
+      let assistantAdded = false;
 
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
 
       const langHint = language === "auto" ? null : language;
 
       abortRef.current = streamChatMessage(content, accountId, langHint, {
         onTextDelta(chunk) {
-          setIsLoading(false);
-          setIsStreaming(true);
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? { ...msg, content: msg.content + chunk }
-                : msg,
-            ),
-          );
+          if (!assistantAdded) {
+            assistantAdded = true;
+            setIsLoading(false);
+            setIsStreaming(true);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: assistantId,
+                role: "assistant" as const,
+                content: chunk,
+                timestamp: new Date(),
+              },
+            ]);
+          } else {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? { ...msg, content: msg.content + chunk }
+                  : msg,
+              ),
+            );
+          }
         },
         onDone(payload) {
           setIsStreaming(false);
