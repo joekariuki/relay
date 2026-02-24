@@ -108,6 +108,7 @@ async def process_voice(
     Returns:
         Dict with response, transcript, tools, latency breakdown, and optional audio.
     """
+    # Lazy import: OpenAI client created per-call; avoids import if voice is unused
     from openai import AsyncOpenAI
     from src.config import get_settings
 
@@ -154,6 +155,7 @@ async def process_voice(
         }
 
     # Stage 2: Agent processing
+    # Lazy import: avoids circular import between voice and agent modules
     from src.agent.core import process_message
 
     agent_result = await process_message(
