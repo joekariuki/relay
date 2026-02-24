@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.environment,
     )
     if not settings.anthropic_api_key:
-        logger.warning("ANTHROPIC_API_KEY not set - agent endpoints will return errors")
+        logger.warning("ANTHROPIC_API_KEY not set - agent may fail if using Anthropic models")
     yield
     logger.info("Shutting down Relay backend")
 
