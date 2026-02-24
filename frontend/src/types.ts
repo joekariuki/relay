@@ -63,3 +63,16 @@ export interface VoiceApiResponse {
   latency_ms: Record<string, number>;
   audio_base64: string | null;
 }
+
+export interface StreamDonePayload {
+  language_detected: string;
+  tools_used: ToolCall[];
+  groundedness_score: number | null;
+  latency_ms: Record<string, number>;
+}
+
+export interface StreamCallbacks {
+  onTextDelta: (chunk: string) => void;
+  onDone: (payload: StreamDonePayload) => void;
+  onError: (message: string) => void;
+}
