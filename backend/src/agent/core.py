@@ -1,26 +1,170 @@
 """Core agent orchestration loop.
 
-Pipeline: guardrails -> language detection -> prompt selection -> Claude tool-use loop -> response.
+Pipeline: guardrails -> language detection -> prompt selection -> pydantic-ai agent -> response.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
-from src.knowledge.models import AgentResponse, Language, ToolCallRecord
+from pydantic_ai import Agent, RunContext, UsageLimits
+from pydantic_ai.settings import ModelSettings
 
+from src.config import get_settings
 from src.knowledge.accounts import get_account
+from src.knowledge.models import AgentResponse, Language, ToolCallRecord
 
 from .formatting import clean_response_text
 from .guardrails import check_guardrails
 from .prompts import get_system_prompt
 from .router import LanguageDetectionResult, detect_language
-from .tools import TOOL_DEFINITIONS, execute_tool
+from .tools import execute_tool
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AgentDeps:
+    """Runtime dependencies injected into the agent via RunContext."""
+
+    account_id: str
+    language: str
+    tool_records: list[ToolCallRecord] = field(default_factory=list)
+
+
+# Module-level agent instance — model provided at run time via agent.run(model=...)
+support_agent = Agent(
+    deps_type=AgentDeps,
+)
+
+
+@support_agent.system_prompt
+def build_system_prompt(ctx: RunContext[AgentDeps]) -> str:
+    """Build the system prompt with user context and language."""
+    account = get_account(ctx.deps.account_id)
+    return get_system_prompt(
+        ctx.deps.language,
+        user_name=account.name if account else "Unknown",
+        account_id=ctx.deps.account_id,
+        user_country=account.country if account else "Unknown",
+    )
+
+
+# === Tool Definitions (registered via @agent.tool) ===
+
+
+@support_agent.tool
+async def check_balance(ctx: RunContext[AgentDeps]) -> dict[str, object]:
+    """Check the current balance of the user's DuniaWallet account.
+    Returns balance in CFA Francs, account holder name, and KYC tier.
+    The account ID is partially masked for security."""
+    record = execute_tool("check_balance", {"account_id": ctx.deps.account_id})
+    ctx.deps.tool_records.append(record)
+    return record.result
+
+
+@support_agent.tool
+async def get_transactions(ctx: RunContext[AgentDeps], limit: int = 5) -> dict[str, object]:
+    """Get recent transactions for the user's account, sorted by most recent first.
+
+    Args:
+        limit: Maximum number of transactions to return (1-20, default 5).
+    """
+    record = execute_tool("get_transactions", {
+        "account_id": ctx.deps.account_id,
+        "limit": limit,
+    })
+    ctx.deps.tool_records.append(record)
+    return record.result
+
+
+@support_agent.tool
+async def lookup_transaction(ctx: RunContext[AgentDeps], query: str) -> dict[str, object]:
+    """Search for specific transactions by transaction ID, recipient name, or description.
+
+    Args:
+        query: Search query - transaction ID, recipient name, or keyword.
+    """
+    record = execute_tool("lookup_transaction", {
+        "account_id": ctx.deps.account_id,
+        "query": query,
+    })
+    ctx.deps.tool_records.append(record)
+    return record.result
+
+
+@support_agent.tool
+async def calculate_fees(
+    ctx: RunContext[AgentDeps],
+    amount: int,
+    destination_country: str,
+    currency: str = "XOF",
+) -> dict[str, object]:
+    """Calculate the transfer fee for a given amount and destination.
+
+    Args:
+        amount: Transfer amount in CFA Francs.
+        destination_country: Destination - 'domestic' for local, or country name.
+        currency: Currency code (default 'XOF').
+    """
+    record = execute_tool("calculate_fees", {
+        "amount": amount,
+        "currency": currency,
+        "destination_country": destination_country,
+    })
+    ctx.deps.tool_records.append(record)
+    return record.result
+
+
+@support_agent.tool
+async def find_agent(ctx: RunContext[AgentDeps], location: str) -> dict[str, object]:
+    """Find DuniaWallet cash-in/cash-out agents near a given location.
+
+    Args:
+        location: City, neighborhood, or area name to search.
+    """
+    record = execute_tool("find_agent", {"location": location})
+    ctx.deps.tool_records.append(record)
+    return record.result
+
+
+@support_agent.tool
+async def get_policy(ctx: RunContext[AgentDeps], topic: str) -> dict[str, object]:
+    """Retrieve a DuniaWallet service policy by topic.
+
+    Args:
+        topic: Policy topic key (e.g., transaction_limits, fees, kyc_verification).
+    """
+    record = execute_tool("get_policy", {"topic": topic})
+    ctx.deps.tool_records.append(record)
+    return record.result
+
+
+@support_agent.tool
+async def create_support_ticket(
+    ctx: RunContext[AgentDeps],
+    category: str,
+    summary: str,
+    priority: str = "medium",
+) -> dict[str, object]:
+    """Create a support ticket for issues requiring human intervention.
+
+    Args:
+        category: Ticket category (dispute, account_issue, transaction_problem, kyc_upgrade, other).
+        summary: Brief description of the issue.
+        priority: Ticket priority level (low, medium, high, urgent).
+    """
+    record = execute_tool("create_support_ticket", {
+        "account_id": ctx.deps.account_id,
+        "category": category,
+        "summary": summary,
+        "priority": priority,
+    })
+    ctx.deps.tool_records.append(record)
+    return record.result
 
 
 def _language_code_to_enum(code: str) -> Language:
@@ -33,7 +177,6 @@ async def process_message(
     message: str,
     account_id: str = "acc_001",
     language_hint: str | None = None,
-    client: object | None = None,
 ) -> AgentResponse:
     """Process a user message through the full agent pipeline.
 
@@ -41,13 +184,12 @@ async def process_message(
         message: The user's message text.
         account_id: The DuniaWallet account ID for context.
         language_hint: Optional language hint ("en", "fr", "sw").
-        client: Optional Anthropic AsyncAnthropic client. Created if not provided.
 
     Returns:
         An AgentResponse with the response text, tools used, and metadata.
     """
+    settings = get_settings()
     latency: dict[str, float] = {}
-    tools_used: list[ToolCallRecord] = []
     metadata: dict[str, object] = {}
 
     # === Stage 1: Guardrails ===
@@ -74,9 +216,6 @@ async def process_message(
             secondary_language=None,
         )
     else:
-        from src.config import get_settings
-
-        settings = get_settings()
         lang_result = await detect_language(
             message,
             timeout_s=settings.language_detection_timeout_s,
@@ -88,58 +227,22 @@ async def process_message(
     metadata["language_confidence"] = lang_result.confidence
     metadata["code_switching"] = lang_result.code_switching
 
-    # === Stage 3: Build Messages ===
-    account = get_account(account_id)
-    system_prompt = get_system_prompt(
-        lang_result.language,
-        user_name=account.name if account else "Unknown",
-        account_id=account_id,
-        user_country=account.country if account else "Unknown",
-    )
-    messages: list[dict[str, Any]] = [
-        {"role": "user", "content": message},
-    ]
-
-    # === Stage 4: Agent Loop ===
+    # === Stage 3: Run Agent ===
     t2 = time.perf_counter()
+    deps = AgentDeps(account_id=account_id, language=lang_result.language)
 
     try:
-        from anthropic import AsyncAnthropic
-        from src.config import get_settings
-
-        settings = get_settings()
-
-        if client is None:
-            if not settings.anthropic_api_key:
-                return AgentResponse(
-                    response_text=(
-                        "I'm sorry, the service is temporarily unavailable. "
-                        "Please try again later."
-                    ),
-                    language_detected=_language_code_to_enum(lang_result.language),
-                    tools_used=tools_used,
-                    groundedness_score=None,
-                    latency_ms=latency,
-                    metadata=metadata,
-                )
-            client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-        response_text = await _run_tool_loop(
-            client=client,
-            system_prompt=system_prompt,
-            messages=messages,
-            tools_used=tools_used,
-            account_id=account_id,
+        result = await support_agent.run(
+            message,
+            deps=deps,
             model=settings.agent_model,
-            max_tokens=settings.agent_max_tokens,
-            max_rounds=settings.agent_max_tool_rounds,
+            model_settings=ModelSettings(max_tokens=settings.agent_max_tokens),
+            usage_limits=UsageLimits(
+                request_limit=settings.agent_max_tool_rounds + 1,
+            ),
         )
+        response_text = result.output
 
-    except ImportError:
-        logger.error("anthropic package not available")
-        response_text = (
-            "I'm sorry, the service is temporarily unavailable. Please try again later."
-        )
     except Exception:
         logger.error("Agent processing failed", exc_info=True)
         response_text = (
@@ -155,88 +258,8 @@ async def process_message(
     return AgentResponse(
         response_text=response_text,
         language_detected=_language_code_to_enum(lang_result.language),
-        tools_used=tools_used,
+        tools_used=deps.tool_records,
         groundedness_score=None,
         latency_ms=latency,
         metadata=metadata,
     )
-
-
-async def _run_tool_loop(
-    client: Any,
-    system_prompt: str,
-    messages: list[dict[str, Any]],
-    tools_used: list[ToolCallRecord],
-    account_id: str,
-    model: str,
-    max_tokens: int,
-    max_rounds: int,
-) -> str:
-    """Run the Claude tool-use loop for up to max_rounds iterations.
-
-    Returns the final text response from the assistant.
-    """
-    for round_num in range(max_rounds):
-        logger.debug("Tool-use round %d/%d", round_num + 1, max_rounds)
-
-        response = await client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            tools=TOOL_DEFINITIONS,
-            messages=messages,
-        )
-
-        # Check if we got tool use or just text
-        if response.stop_reason == "end_turn" or response.stop_reason != "tool_use":
-            # Extract text from response
-            return _extract_text(response)
-
-        # Process tool calls
-        tool_results: list[dict[str, Any]] = []
-        for block in response.content:
-            if block.type == "tool_use":
-                # Inject account_id if the tool expects it but LLM didn't provide
-                tool_args = dict(block.input) if isinstance(block.input, dict) else {}
-                if "account_id" in _get_tool_required_params(block.name):
-                    tool_args.setdefault("account_id", account_id)
-
-                record = execute_tool(block.name, tool_args)
-                tools_used.append(record)
-
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(record.result),
-                })
-
-        # Add assistant's response and tool results to conversation
-        messages.append({"role": "assistant", "content": response.content})
-        messages.append({"role": "user", "content": tool_results})
-
-    # If we exhausted all rounds, get a final response without tools
-    logger.warning("Exhausted %d tool-use rounds", max_rounds)
-    response = await client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=messages,
-    )
-    return _extract_text(response)
-
-
-def _extract_text(response: Any) -> str:
-    """Extract text content from a Claude API response."""
-    parts: list[str] = []
-    for block in response.content:
-        if hasattr(block, "text"):
-            parts.append(block.text)
-    return "\n".join(parts) if parts else "I'm sorry, I couldn't generate a response."
-
-
-def _get_tool_required_params(tool_name: str) -> set[str]:
-    """Get required parameters for a tool by name."""
-    for tool in TOOL_DEFINITIONS:
-        if tool["name"] == tool_name:
-            return set(tool["input_schema"].get("required", []))
-    return set()
