@@ -31,14 +31,13 @@ _LANGUAGE_NAMES = {"en": "English", "fr": "French", "sw": "Swahili"}
 
 
 async def evaluate_language_quality(
-    client: object,
     response_text: str,
     expected_language: str,
-    model: str = "claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20241022",
 ) -> LanguageResult:
     """Evaluate language quality and correctness of the response.
 
-    Uses LLM-as-judge (Haiku) to assess language use.
+    Uses LLM-as-judge via pydantic-ai to assess language use.
     """
     lang_name = _LANGUAGE_NAMES.get(expected_language, expected_language)
     prompt = _LANGUAGE_PROMPT.format(
@@ -47,26 +46,16 @@ async def evaluate_language_quality(
     )
 
     try:
-        from anthropic import AsyncAnthropic
+        from pydantic_ai import ModelRequest
+        from pydantic_ai.direct import model_request
+        from pydantic_ai.settings import ModelSettings
 
-        if not isinstance(client, AsyncAnthropic):
-            return LanguageResult(
-                correct_language=True,
-                detected_language=expected_language,
-                fluency_score=1.0,
-                issues=(),
-            )
-
-        response = await client.messages.create(
-            model=model,
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
+        response = await model_request(
+            model,
+            [ModelRequest.user_text_prompt(prompt)],
+            model_settings=ModelSettings(max_tokens=200),
         )
-
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            return _default_result(expected_language)
-        text = first_block.text.strip()
+        text = str(response.parts[0].content).strip()
 
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

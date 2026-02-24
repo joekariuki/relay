@@ -32,14 +32,13 @@ Respond with ONLY a JSON object (no markdown, no explanation):
 
 
 async def score_groundedness(
-    client: object,
     response_text: str,
     tool_results: list[dict[str, object]],
-    model: str = "claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20241022",
 ) -> GroundednessResult:
     """Score how well the response is grounded in tool results.
 
-    Uses LLM-as-judge (Haiku) to evaluate factual claims against evidence.
+    Uses LLM-as-judge via pydantic-ai to evaluate factual claims against evidence.
     """
     if not tool_results:
         return GroundednessResult(
@@ -54,21 +53,16 @@ async def score_groundedness(
     prompt = _GROUNDEDNESS_PROMPT.format(evidence=evidence, response=response_text)
 
     try:
-        from anthropic import AsyncAnthropic
+        from pydantic_ai import ModelRequest
+        from pydantic_ai.direct import model_request
+        from pydantic_ai.settings import ModelSettings
 
-        if not isinstance(client, AsyncAnthropic):
-            return _default_result("Invalid client type")
-
-        response = await client.messages.create(
-            model=model,
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
+        response = await model_request(
+            model,
+            [ModelRequest.user_text_prompt(prompt)],
+            model_settings=ModelSettings(max_tokens=300),
         )
-
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            return _default_result("Non-text response from judge")
-        text = first_block.text.strip()
+        text = str(response.parts[0].content).strip()
 
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

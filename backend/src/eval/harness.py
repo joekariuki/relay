@@ -9,10 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
 
 from src.agent.core import process_message
-from src.knowledge.models import AgentResponse
 
 from .compliance import check_compliance
 from .groundedness import score_groundedness
@@ -30,24 +28,8 @@ class EvalHarness:
     def __init__(
         self,
         concurrency: int = 5,
-        api_key: str | None = None,
     ) -> None:
         self.concurrency = concurrency
-        self.api_key = api_key
-        self._client: Any = None
-
-    async def _get_client(self) -> Any:
-        """Lazily create the Anthropic client."""
-        if self._client is None:
-            from anthropic import AsyncAnthropic
-            from src.config import get_settings
-
-            settings = get_settings()
-            key = self.api_key or settings.anthropic_api_key
-            if not key:
-                raise ValueError("ANTHROPIC_API_KEY is required to run evaluations")
-            self._client = AsyncAnthropic(api_key=key)
-        return self._client
 
     async def run(
         self,
@@ -87,17 +69,18 @@ class EvalHarness:
 
     async def _evaluate_case(self, case: TestCase) -> CaseResult:
         """Evaluate a single test case through the full pipeline."""
+        from src.config import get_settings
+
         start = time.perf_counter()
 
         try:
-            client = await self._get_client()
+            settings = get_settings()
 
             # Run the agent
             agent_response = await process_message(
                 message=case.message,
                 account_id=case.account_id,
                 language_hint=case.language,
-                client=client,
             )
 
             response_text = agent_response.response_text
@@ -120,13 +103,13 @@ class EvalHarness:
 
             # Run evaluation judges in parallel
             groundedness_task = score_groundedness(
-                client, response_text, tool_results
+                response_text, tool_results, model=settings.eval_model
             )
             hallucination_task = detect_hallucinations(
-                client, response_text, case.message, tool_results
+                response_text, case.message, tool_results, model=settings.eval_model
             )
             language_task = evaluate_language_quality(
-                client, response_text, case.language
+                response_text, case.language, model=settings.eval_model
             )
 
             groundedness, hallucination, language_quality = await asyncio.gather(

@@ -40,15 +40,14 @@ If the response is clean (no hallucinations), return: {{"clean": true, "hallucin
 
 
 async def detect_hallucinations(
-    client: object,
     response_text: str,
     user_message: str,
     tool_results: list[dict[str, object]],
-    model: str = "claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20241022",
 ) -> HallucinationResult:
     """Detect hallucinations in the agent's response.
 
-    Uses LLM-as-judge (Haiku) to identify fabricated data and false claims.
+    Uses LLM-as-judge via pydantic-ai to identify fabricated data and false claims.
     """
     evidence = json.dumps(tool_results, indent=2, default=str) if tool_results else "None"
     prompt = _HALLUCINATION_PROMPT.format(
@@ -58,21 +57,16 @@ async def detect_hallucinations(
     )
 
     try:
-        from anthropic import AsyncAnthropic
+        from pydantic_ai import ModelRequest
+        from pydantic_ai.direct import model_request
+        from pydantic_ai.settings import ModelSettings
 
-        if not isinstance(client, AsyncAnthropic):
-            return HallucinationResult(clean=True, hallucinations=())
-
-        response = await client.messages.create(
-            model=model,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
+        response = await model_request(
+            model,
+            [ModelRequest.user_text_prompt(prompt)],
+            model_settings=ModelSettings(max_tokens=400),
         )
-
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            return HallucinationResult(clean=True, hallucinations=())
-        text = first_block.text.strip()
+        text = str(response.parts[0].content).strip()
 
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
