@@ -48,6 +48,7 @@ async def evaluate_language_quality(
     try:
         from pydantic_ai import ModelRequest
         from pydantic_ai.direct import model_request
+        from pydantic_ai.messages import TextPart
         from pydantic_ai.settings import ModelSettings
 
         response = await model_request(
@@ -55,7 +56,9 @@ async def evaluate_language_quality(
             [ModelRequest.user_text_prompt(prompt)],
             model_settings=ModelSettings(max_tokens=200),
         )
-        text = str(response.parts[0].content).strip()
+        first_part = response.parts[0]
+        assert isinstance(first_part, TextPart), f"Expected TextPart, got {type(first_part)}"
+        text = first_part.content.strip()
 
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

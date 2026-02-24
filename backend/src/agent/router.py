@@ -141,7 +141,11 @@ async def detect_language(
 
         import json
 
-        text = str(response.parts[0].content).strip()
+        from pydantic_ai.messages import TextPart
+
+        first_part = response.parts[0]
+        assert isinstance(first_part, TextPart), f"Expected TextPart, got {type(first_part)}"
+        text = first_part.content.strip()
         # Handle potential markdown code blocks
         if text.startswith("```"):
             text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
