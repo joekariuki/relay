@@ -6,7 +6,7 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 
 ## Features
 
-- **Tool-use agent** — Claude Sonnet orchestrates 7 tools (balance checks, transactions, fees, agent lookup, policies, support tickets) through a multi-turn conversation loop
+- **Tool-use agent** — Claude Sonnet via Pydantic AI orchestrates 7 tools (balance checks, transactions, fees, agent lookup, policies, support tickets) through a multi-turn conversation loop
 - **Multilingual support** — English, French, and Swahili with automatic language detection and code-switching handling (e.g. "Nataka ku-check balance yangu")
 - **Voice pipeline** — Whisper ASR for speech-to-text, language-specific TTS voices (alloy/nova/echo), full latency tracking at every stage
 - **Evaluation framework** — 100+ curated test cases scored across 4 dimensions: groundedness, hallucination detection, compliance, and language quality
@@ -76,9 +76,10 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 
 | Layer | Technology |
 |-------|-----------|
-| Agent reasoning | Claude Sonnet (tool-use loop, max 5 rounds) |
-| Language detection | Claude Haiku (with keyword heuristic fallback) |
-| Eval judges | Claude Haiku (groundedness, hallucination, language quality) |
+| LLM framework | Pydantic AI (`pydantic-ai-slim`) — provider-agnostic Agent + tool decorators |
+| Agent reasoning | Claude Sonnet via Pydantic AI Agent (tool-use loop, max 5 rounds) |
+| Language detection | Claude Haiku via `model_request()` (with keyword heuristic fallback) |
+| Eval judges | Claude Haiku via `model_request()` (groundedness, hallucination, language quality) |
 | Speech-to-text | OpenAI Whisper (`whisper-1`) |
 | Text-to-speech | OpenAI TTS (`tts-1`) |
 | Backend | Python 3.11+, FastAPI, Pydantic, `mypy --strict` |
@@ -93,8 +94,8 @@ relay/
 │   ├── src/
 │   │   ├── config.py              # Environment config (pydantic-settings)
 │   │   ├── agent/
-│   │   │   ├── core.py            # Orchestration: guardrails → detection → tool loop
-│   │   │   ├── tools.py           # 7 tool definitions + handlers
+│   │   │   ├── core.py            # Pydantic AI Agent with @tool decorators + orchestration
+│   │   │   ├── tools.py           # 7 tool handler implementations
 │   │   │   ├── prompts.py         # System prompts (EN/FR/SW, 10 rules each)
 │   │   │   ├── router.py          # Language detection (Haiku + heuristic)
 │   │   │   └── guardrails.py      # Injection & PII detection (flag, don't block)
@@ -247,7 +248,8 @@ cd ../frontend && npm run build
 
 Key architectural choices are documented in [docs/design-decisions.md](docs/design-decisions.md):
 
-- **Direct Anthropic/OpenAI SDK** over LangChain/LangGraph — transparency, fewer dependencies, full control over the tool-use loop
+- **Pydantic AI** over direct Anthropic SDK — provider-agnostic model swapping, auto-generated tool schemas from type hints, `@agent.tool` decorators replace ~170 lines of manual JSON schema
+- **Pydantic AI** over LangChain/LangGraph — lightweight, Pydantic-native, slim dependency footprint, transparent tool-use loop via `usage_limits`
 - **REST API** over GraphQL — small API surface (4 endpoints), simpler for file uploads
 - **Custom eval framework** over Promptfoo — domain-specific scoring (financial hallucinations, ID masking), tighter integration with agent pipeline
 - **In-memory data** over database — zero infrastructure, deterministic tests, instant startup

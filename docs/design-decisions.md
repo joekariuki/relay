@@ -6,7 +6,7 @@ This document captures key architectural and technical decisions made during the
 
 ## 1. Direct SDK Usage vs. LLM Frameworks (LangChain / LangGraph)
 
-**Decision**: Use the Anthropic Python SDK and OpenAI Python SDK directly instead of frameworks like LangChain or LangGraph.
+**Decision**: Use the Anthropic Python SDK and OpenAI Python SDK directly instead of frameworks like LangChain or LangGraph. *(Update: the Anthropic SDK has since been replaced by Pydantic AI — see Decision #6.)*
 
 **Context**: LangChain and LangGraph are popular frameworks that provide abstractions over LLM APIs, including tool-use orchestration, chain composition, and agent patterns. The question was whether to adopt one of these frameworks or build the agent loop directly against the vendor SDKs.
 
@@ -30,15 +30,15 @@ This document captures key architectural and technical decisions made during the
 - We don't get LangChain's built-in tracing/observability (LangSmith). Instead, we track latency manually with `time.perf_counter()` at each pipeline stage and include it in every response.
 - If the project needed complex multi-agent workflows (handoffs, parallel agent execution, state machines), LangGraph would be worth reconsidering.
 
-**Where each SDK is used**:
+**Where each SDK is used** *(updated after Pydantic AI migration — see Decision #6)*:
 
 | SDK | Module | Purpose |
 |-----|--------|---------|
-| `anthropic.AsyncAnthropic` | `src/agent/core.py` | Main agent loop (Claude Sonnet, tool-use) |
-| `anthropic.AsyncAnthropic` | `src/agent/router.py` | Language detection (Claude Haiku) |
-| `anthropic.AsyncAnthropic` | `src/eval/groundedness.py` | LLM-as-judge groundedness scoring |
-| `anthropic.AsyncAnthropic` | `src/eval/hallucination.py` | LLM-as-judge hallucination detection |
-| `anthropic.AsyncAnthropic` | `src/eval/language_quality.py` | LLM-as-judge language quality |
+| `pydantic_ai.Agent` | `src/agent/core.py` | Main agent loop (Claude Sonnet, tool-use via `@agent.tool`) |
+| `pydantic_ai.direct.model_request` | `src/agent/router.py` | Language detection (Claude Haiku) |
+| `pydantic_ai.direct.model_request` | `src/eval/groundedness.py` | LLM-as-judge groundedness scoring |
+| `pydantic_ai.direct.model_request` | `src/eval/hallucination.py` | LLM-as-judge hallucination detection |
+| `pydantic_ai.direct.model_request` | `src/eval/language_quality.py` | LLM-as-judge language quality |
 | `openai.AsyncOpenAI` | `src/voice/pipeline.py` | Whisper ASR + TTS synthesis |
 
 ---
@@ -123,3 +123,46 @@ This document captures key architectural and technical decisions made during the
 **Context**: OpenAI's TTS API offers multiple voice options. The question was whether to use a single voice for all languages or select per-language.
 
 **Reasoning**: Different voices handle different languages' phonetic patterns with varying quality. Using distinct voices also provides an audio cue to the user about which language the system is responding in, improving the multilingual experience.
+
+---
+
+## 6. Pydantic AI vs. Direct Anthropic SDK
+
+**Decision**: Replace all direct `anthropic.AsyncAnthropic` usage with [Pydantic AI](https://ai.pydantic.dev/) (`pydantic-ai-slim`), using `Agent` with `@agent.tool` decorators for the core agent and `model_request()` for lightweight LLM-as-judge calls.
+
+**Context**: The original architecture (Decision #1) used the Anthropic SDK directly with a manual tool-use loop. As the project matured and the roadmap called for streaming responses, multi-agent handoff, and model experimentation (e.g., comparing Claude vs. GPT-4.1), the cost of maintaining provider-specific code increased. The question was whether to adopt a framework now or continue with direct SDK usage.
+
+**Why now**:
+
+- **Provider-agnostic model swapping**: Upcoming features require comparing model performance across providers (Anthropic, OpenAI). Pydantic AI lets you swap models by changing a config string (e.g., `"anthropic:claude-sonnet-4-5-20250929"` → `"openai:gpt-4.1"`). Without it, every provider would need its own client setup, message format handling, and tool schema translation.
+- **Streaming and multi-agent handoff**: The next phases of the roadmap (SSE streaming, agent-to-agent handoff) are substantially easier to build on a framework that already handles the tool-use loop and provides streaming primitives.
+- **Tool schema maintenance burden**: The manual `TOOL_DEFINITIONS` list was ~170 lines of JSON schema dicts that had to be kept in sync with the handler functions. Any parameter rename or type change required updating both places.
+
+**Why Pydantic AI specifically**:
+
+- **Already in the Pydantic ecosystem**: The project uses Pydantic everywhere — FastAPI request/response models, `pydantic-settings` for configuration, dataclass-style domain models. Pydantic AI is a natural extension.
+- **`@agent.tool` auto-generates schemas from type hints**: Adding a tool is now a single decorated async function. The tool name, description (from docstring), and parameter schema (from type annotations) are all inferred automatically. This eliminated ~170 lines of manual JSON schema.
+- **Two API surfaces for different needs**: `Agent` with `@agent.tool` for the core conversational agent (handles the full tool-use loop), and `model_request()` for simple one-shot LLM calls (eval scorers, language detection). Both use the same model string format.
+- **Slim install**: `pydantic-ai-slim[anthropic,openai]` pulls in only what's needed — no heavy transitive dependencies.
+- **`RunContext` dependency injection**: Tools receive runtime context (account ID, language, tool records) via `RunContext[AgentDeps]` without global state or closures.
+
+**What changed vs. Decision #1**:
+
+The original direct-SDK approach was the right call for the initial build — it kept the system transparent and dependency-light while the focus was on getting the agent pipeline working correctly. Pydantic AI preserves that transparency (the tool-use loop is still visible via `usage_limits`, tool functions are plain Python, prompt construction is explicit) while adding the provider abstraction needed for the next phase. The core pipeline structure (guardrails → language detection → prompt selection → agent → response) is unchanged.
+
+**Trade-offs accepted**:
+
+- **Framework dependency**: Adds `pydantic-ai-slim` as a dependency. However, it's maintained by the Pydantic team (same maintainers as FastAPI's validation layer) and has a stable API.
+- **Tool-use loop is framework-managed**: The manual `while` loop in `_run_tool_loop()` is replaced by `agent.run()`. The loop is now less visible but controllable via `UsageLimits(request_limit=N)` and fully logged by Pydantic AI's instrumentation.
+- **Provider SDK becomes transitive**: `anthropic` is no longer a direct dependency — it's pulled in via `pydantic-ai-slim[anthropic]`. This is fine for our use case but means provider SDK versions are managed by Pydantic AI.
+
+**Migration scope** (8 atomic commits):
+
+| What | Before | After |
+|------|--------|-------|
+| Core agent | `client.messages.create()` in a `while` loop | `Agent.run()` with `@agent.tool` decorators |
+| Tool schemas | 170-line `TOOL_DEFINITIONS` list | Auto-generated from type hints and docstrings |
+| Eval scorers | `client.messages.create()` with `client` param | `model_request()` with `model` param |
+| Language detection | `client.messages.create()` with `client` param | `model_request()` with `model` param |
+| Config model strings | `"claude-sonnet-4-5-20250929"` | `"anthropic:claude-sonnet-4-5-20250929"` |
+| Direct `anthropic` dep | `anthropic>=0.40.0` in pyproject.toml | Transitive via `pydantic-ai-slim[anthropic]` |
