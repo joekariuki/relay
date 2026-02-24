@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -38,8 +39,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         VERSION,
         settings.environment,
     )
-    if not settings.anthropic_api_key:
+    # Export API keys to os.environ so pydantic-ai providers can find them.
+    # pydantic-settings reads .env into Settings but doesn't set os.environ.
+    if settings.anthropic_api_key:
+        os.environ.setdefault("ANTHROPIC_API_KEY", settings.anthropic_api_key)
+    else:
         logger.warning("ANTHROPIC_API_KEY not set - agent may fail if using Anthropic models")
+    if settings.openai_api_key:
+        os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
     yield
     logger.info("Shutting down Relay backend")
 
