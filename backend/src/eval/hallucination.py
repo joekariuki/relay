@@ -43,7 +43,7 @@ async def detect_hallucinations(
     response_text: str,
     user_message: str,
     tool_results: list[dict[str, object]],
-    model: str = "anthropic:claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20251001",
 ) -> HallucinationResult:
     """Detect hallucinations in the agent's response.
 

@@ -34,7 +34,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
 async def score_groundedness(
     response_text: str,
     tool_results: list[dict[str, object]],
-    model: str = "anthropic:claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20251001",
 ) -> GroundednessResult:
     """Score how well the response is grounded in tool results.
 

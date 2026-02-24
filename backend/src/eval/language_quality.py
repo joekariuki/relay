@@ -33,7 +33,7 @@ _LANGUAGE_NAMES = {"en": "English", "fr": "French", "sw": "Swahili"}
 async def evaluate_language_quality(
     response_text: str,
     expected_language: str,
-    model: str = "anthropic:claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20251001",
 ) -> LanguageResult:
     """Evaluate language quality and correctness of the response.
 

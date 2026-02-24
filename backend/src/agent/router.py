@@ -104,7 +104,7 @@ def _heuristic_language_detect(message: str) -> LanguageDetectionResult:
 async def detect_language(
     message: str,
     timeout_s: float = 2.0,
-    model: str = "anthropic:claude-haiku-4-5-20241022",
+    model: str = "anthropic:claude-haiku-4-5-20251001",
 ) -> LanguageDetectionResult:
     """Detect the language of a user message using an LLM via pydantic-ai.
 
