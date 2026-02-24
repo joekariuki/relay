@@ -69,6 +69,7 @@ class EvalHarness:
 
     async def _evaluate_case(self, case: TestCase) -> CaseResult:
         """Evaluate a single test case through the full pipeline."""
+        # Lazy import: config fetched per-case to pick up runtime overrides
         from src.config import get_settings
 
         start = time.perf_counter()

@@ -135,6 +135,7 @@ def save_report(report: EvalReport, output_dir: str = "eval_results") -> str:
     }
 
     # Use timestamp in filename
+    # Lazy import: datetime only needed when persisting report to disk
     import datetime
 
     timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")

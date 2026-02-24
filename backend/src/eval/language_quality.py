@@ -46,6 +46,7 @@ async def evaluate_language_quality(
     )
 
     try:
+        # Lazy import: pydantic-ai direct API deferred to avoid heavy eval imports at startup
         from pydantic_ai import ModelRequest
         from pydantic_ai.direct import model_request
         from pydantic_ai.messages import TextPart
