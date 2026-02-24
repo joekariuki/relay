@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # Agent settings
-    agent_model: str = "anthropic:claude-sonnet-4-5-20250929"
+    agent_model: str = "anthropic:claude-sonnet-4-6"
     agent_max_tokens: int = 1024
     agent_max_tool_rounds: int = 5
 
