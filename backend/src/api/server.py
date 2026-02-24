@@ -96,6 +96,7 @@ async def health() -> HealthResponse:
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """Process a text message through the agent pipeline."""
+    # Lazy import: agent core deferred to keep server startup fast
     from src.agent.core import process_message
 
     try:
@@ -132,6 +133,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     """Stream a chat response as Server-Sent Events."""
+    # Lazy import: agent core deferred to keep server startup fast
     from src.agent.core import process_message_stream
 
     return StreamingResponse(
@@ -153,6 +155,7 @@ async def voice(
 ) -> VoiceResponse:
     """Process a voice message: ASR -> Agent -> optional TTS."""
     try:
+        # Lazy import: voice pipeline is an optional dependency
         from src.voice.pipeline import process_voice
 
         audio_bytes = await audio.read()
@@ -192,6 +195,7 @@ async def voice(
 async def run_eval(request: EvalRequest) -> EvalResponse:
     """Run the evaluation suite. Warning: this can take several minutes."""
     try:
+        # Lazy import: eval harness is heavy and rarely called
         from src.eval.harness import EvalHarness
         from src.eval.models import EvalCategory
 
