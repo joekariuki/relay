@@ -12,6 +12,7 @@ export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [accountId, setAccountId] = useState("acc_001");
   const [language, setLanguage] = useState<Language>("auto");
   const abortRef = useRef<AbortController | null>(null);
@@ -34,11 +35,15 @@ export function useChat() {
       const langHint = language === "auto" ? null : language;
 
       abortRef.current = streamChatMessage(content, accountId, langHint, {
+        onStatus(message) {
+          setStatusMessage(message);
+        },
         onTextDelta(chunk) {
           if (!assistantAdded) {
             assistantAdded = true;
             setIsLoading(false);
             setIsStreaming(true);
+            setStatusMessage("");
             setMessages((prev) => [
               ...prev,
               {
@@ -60,6 +65,7 @@ export function useChat() {
         },
         onDone(payload) {
           setIsStreaming(false);
+          setStatusMessage("");
           const metadata: ResponseMetadata = {
             language_detected: payload.language_detected,
             tools_used: payload.tools_used,
@@ -75,6 +81,7 @@ export function useChat() {
         onError(message) {
           setIsLoading(false);
           setIsStreaming(false);
+          setStatusMessage("");
           // Remove the empty assistant placeholder and add error message
           setMessages((prev) => {
             const filtered = prev.filter((msg) => msg.id !== assistantId);
@@ -100,12 +107,14 @@ export function useChat() {
     setMessages([]);
     setIsLoading(false);
     setIsStreaming(false);
+    setStatusMessage("");
   }, []);
 
   return {
     messages,
     isLoading,
     isStreaming,
+    statusMessage,
     accountId,
     language,
     setAccountId,
