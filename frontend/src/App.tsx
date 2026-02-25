@@ -14,6 +14,7 @@ function App() {
     messages,
     isLoading,
     isStreaming,
+    statusMessage,
     accountId,
     language,
     setAccountId,
@@ -113,6 +114,7 @@ function App() {
             messages={allMessages}
             isLoading={isLoading || isProcessing}
             isStreaming={isStreaming}
+            statusMessage={statusMessage}
           />
         )}
       </main>
