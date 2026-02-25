@@ -107,6 +107,9 @@ export function streamChatMessage(
           } else if (eventType === "done") {
             const parsed = JSON.parse(data) as StreamDonePayload;
             callbacks.onDone(parsed);
+          } else if (eventType === "status") {
+            const parsed = JSON.parse(data) as { message: string };
+            callbacks.onStatus?.(parsed.message);
           } else if (eventType === "error") {
             const parsed = JSON.parse(data) as { message: string };
             callbacks.onError(parsed.message);

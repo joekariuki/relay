@@ -75,4 +75,5 @@ export interface StreamCallbacks {
   onTextDelta: (chunk: string) => void;
   onDone: (payload: StreamDonePayload) => void;
   onError: (message: string) => void;
+  onStatus?: (message: string) => void;
 }
