@@ -28,6 +28,17 @@ from .tools import execute_tool
 
 logger = logging.getLogger(__name__)
 
+# User-friendly status messages emitted via SSE while tools execute
+_TOOL_STATUS_MESSAGES: dict[str, str] = {
+    "check_balance": "Checking account balance",
+    "get_transactions": "Fetching recent transactions",
+    "lookup_transaction": "Searching transactions",
+    "calculate_fees": "Calculating transfer fees",
+    "find_agent": "Finding nearby agents",
+    "get_policy": "Looking up service policies",
+    "create_support_ticket": "Creating support ticket",
+}
+
 
 @dataclass
 class AgentDeps:
@@ -331,6 +342,8 @@ async def process_message_stream(
         t2 = time.perf_counter()
         deps = AgentDeps(account_id=account_id, language=lang_result.language)
 
+        yield _sse_event("status", {"message": "Analyzing your request"})
+
         accumulated_text = ""
         pending_chunks: list[str] = []
         async with support_agent.iter(
@@ -352,9 +365,15 @@ async def process_message_stream(
                     async with node.stream(agent_run.ctx) as stream:
                         async for chunk in stream.stream_text(delta=True, debounce_by=None):
                             pending_chunks.append(chunk)
+                elif support_agent.is_call_tools_node(node):
+                    # Emit contextual status before executing tools
+                    for tc in node.model_response.tool_calls:
+                        msg = _TOOL_STATUS_MESSAGES.get(tc.tool_name, "Processing")
+                        yield _sse_event("status", {"message": msg})
                 node = await agent_run.next(node)
 
         # Flush the final model turn to the client (cleaned)
+        yield _sse_event("status", {"message": "Preparing your response"})
         accumulated_text = clean_response_text("".join(pending_chunks))
         if accumulated_text:
             yield _sse_event("text_delta", {"chunk": accumulated_text})
