@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     language_detection_model: str = "anthropic:claude-haiku-4-5-20251001"
     language_detection_timeout_s: float = 2.0
 
+    # Session settings
+    session_ttl_minutes: int = 30
+    session_max_history: int = 20
+
     # Eval judge model
     eval_model: str = "anthropic:claude-haiku-4-5-20251001"
 
