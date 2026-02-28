@@ -1,15 +1,22 @@
 import { useEffect, useRef } from "react";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, Language } from "../types";
 import { MessageBubble } from "./MessageBubble";
+
+const FALLBACK_STATUS: Record<string, string> = {
+  en: "Processing...",
+  fr: "Traitement en cours...",
+  sw: "Inashughulikiwa...",
+};
 
 interface Props {
   messages: ChatMessage[];
   isLoading: boolean;
   isStreaming: boolean;
   statusMessage: string;
+  language: Language;
 }
 
-export function ChatWindow({ messages, isLoading, isStreaming, statusMessage }: Props) {
+export function ChatWindow({ messages, isLoading, isStreaming, statusMessage, language }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +43,7 @@ export function ChatWindow({ messages, isLoading, isStreaming, statusMessage }: 
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
               <span className="text-sm text-gray-500">
-                {statusMessage || "Processing..."}
+                {statusMessage || FALLBACK_STATUS[language] || FALLBACK_STATUS.en}
               </span>
             </div>
           </div>

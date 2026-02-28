@@ -28,16 +28,66 @@ from .tools import execute_tool
 
 logger = logging.getLogger(__name__)
 
-# User-friendly status messages emitted via SSE while tools execute
-_TOOL_STATUS_MESSAGES: dict[str, str] = {
-    "check_balance": "Checking account balance",
-    "get_transactions": "Fetching recent transactions",
-    "lookup_transaction": "Searching transactions",
-    "calculate_fees": "Calculating transfer fees",
-    "find_agent": "Finding nearby agents",
-    "get_policy": "Looking up service policies",
-    "create_support_ticket": "Creating support ticket",
+# User-friendly status messages emitted via SSE while tools execute (per language)
+_TOOL_STATUS_MESSAGES: dict[str, dict[str, str]] = {
+    "check_balance": {
+        "en": "Checking account balance",
+        "fr": "Vérification du solde",
+        "sw": "Kuangalia salio la akaunti",
+    },
+    "get_transactions": {
+        "en": "Fetching recent transactions",
+        "fr": "Récupération des transactions récentes",
+        "sw": "Kupata miamala ya hivi karibuni",
+    },
+    "lookup_transaction": {
+        "en": "Searching transactions",
+        "fr": "Recherche de transactions",
+        "sw": "Kutafuta miamala",
+    },
+    "calculate_fees": {
+        "en": "Calculating transfer fees",
+        "fr": "Calcul des frais de transfert",
+        "sw": "Kukokotoa ada za uhamisho",
+    },
+    "find_agent": {
+        "en": "Finding nearby agents",
+        "fr": "Recherche d'agents à proximité",
+        "sw": "Kutafuta mawakala wa karibu",
+    },
+    "get_policy": {
+        "en": "Looking up service policies",
+        "fr": "Consultation des politiques du service",
+        "sw": "Kutafuta sera za huduma",
+    },
+    "create_support_ticket": {
+        "en": "Creating support ticket",
+        "fr": "Création d'un ticket d'assistance",
+        "sw": "Kuunda tiketi ya msaada",
+    },
 }
+
+_STAGE_STATUS_MESSAGES: dict[str, dict[str, str]] = {
+    "analyzing": {
+        "en": "Analyzing your request",
+        "fr": "Analyse de votre demande",
+        "sw": "Kuchambua ombi lako",
+    },
+    "preparing": {
+        "en": "Preparing your response",
+        "fr": "Préparation de votre réponse",
+        "sw": "Kuandaa jibu lako",
+    },
+    "processing": {
+        "en": "Processing",
+        "fr": "Traitement en cours",
+        "sw": "Inashughulikiwa",
+    },
+}
+
+
+def _get_status(messages: dict[str, str], lang: str) -> str:
+    return messages.get(lang, messages["en"])
 
 
 @dataclass
@@ -342,7 +392,8 @@ async def process_message_stream(
         t2 = time.perf_counter()
         deps = AgentDeps(account_id=account_id, language=lang_result.language)
 
-        yield _sse_event("status", {"message": "Analyzing your request"})
+        lang = lang_result.language
+        yield _sse_event("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["analyzing"], lang)})
 
         accumulated_text = ""
         pending_chunks: list[str] = []
@@ -358,22 +409,18 @@ async def process_message_stream(
             node = agent_run.next_node
             while not isinstance(node, End):
                 if support_agent.is_model_request_node(node):
-                    # Buffer this turn's text; discard any previous
-                    # (intermediate) turn so filler like "Let me check…"
-                    # is never shown to the user.
                     pending_chunks = []
                     async with node.stream(agent_run.ctx) as stream:
                         async for chunk in stream.stream_text(delta=True, debounce_by=None):
                             pending_chunks.append(chunk)
                 elif support_agent.is_call_tools_node(node):
-                    # Emit contextual status before executing tools
                     for tc in node.model_response.tool_calls:
-                        msg = _TOOL_STATUS_MESSAGES.get(tc.tool_name, "Processing")
+                        tool_msgs = _TOOL_STATUS_MESSAGES.get(tc.tool_name)
+                        msg = _get_status(tool_msgs, lang) if tool_msgs else _get_status(_STAGE_STATUS_MESSAGES["processing"], lang)
                         yield _sse_event("status", {"message": msg})
                 node = await agent_run.next(node)
 
-        # Flush the final model turn to the client (cleaned)
-        yield _sse_event("status", {"message": "Preparing your response"})
+        yield _sse_event("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["preparing"], lang)})
         accumulated_text = clean_response_text("".join(pending_chunks))
         if accumulated_text:
             yield _sse_event("text_delta", {"chunk": accumulated_text})

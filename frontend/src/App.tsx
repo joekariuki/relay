@@ -115,6 +115,7 @@ function App() {
             isLoading={isLoading || isProcessing}
             isStreaming={isStreaming}
             statusMessage={statusMessage}
+            language={language}
           />
         )}
       </main>
