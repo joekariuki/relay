@@ -107,9 +107,23 @@ class StreamContext:
     all_messages: list[ModelMessage] = field(default_factory=list)
 
 
+def _cap_message_history(messages: list[ModelMessage]) -> list[ModelMessage]:
+    """Keep only the most recent message pairs to bound token usage.
+
+    Preserves the first message (which contains the system prompt context)
+    and the most recent N messages to avoid unbounded context growth.
+    """
+    settings = get_settings()
+    max_messages = settings.session_max_history * 2
+    if len(messages) <= max_messages:
+        return messages
+    return messages[:1] + messages[-(max_messages - 1):]
+
+
 # Module-level agent instance — model provided at run time via agent.run(model=...)
 support_agent = Agent(
     deps_type=AgentDeps,
+    history_processors=[_cap_message_history],
 )
 
 

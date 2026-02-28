@@ -82,6 +82,14 @@ export function DebugPanel({ metadata }: Props) {
               </div>
             </div>
           )}
+
+          {/* Session */}
+          {metadata.session_id && (
+            <div>
+              <h4 className="font-semibold text-gray-700 mb-1">Session</h4>
+              <span className="font-mono text-gray-500">{metadata.session_id}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

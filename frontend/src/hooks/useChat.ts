@@ -79,6 +79,7 @@ export function useChat() {
               tools_used: payload.tools_used,
               groundedness_score: payload.groundedness_score,
               latency_ms: payload.latency_ms,
+              session_id: payload.session_id,
             };
             setMessages((prev) =>
               prev.map((msg) =>
