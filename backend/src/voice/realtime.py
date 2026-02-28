@@ -128,7 +128,7 @@ class VoiceSession:
             sample_rate="16000",
             channels="1",
             interim_results="true",
-            utterance_end_ms=str(settings.voice_endpointing_ms),
+            endpointing=str(settings.voice_endpointing_ms),
             vad_events="true",
             punctuate="true",
             smart_format="true",
@@ -140,7 +140,26 @@ class VoiceSession:
         logger.info("Deepgram ASR connected (session=%s, lang=%s)", self.session_id, dg_language)
 
     async def _receive_loop(self) -> None:
-        """Read messages from Deepgram and push them onto the transcript queue."""
+        """Read messages from Deepgram and push them onto the transcript queue.
+
+        Since Deepgram's API no longer supports utterance_end_ms, we implement
+        a client-side utterance end timer: after receiving is_final=true, we
+        wait for a silence period before emitting an utterance_end event.
+        """
+        utterance_timer: asyncio.Task[None] | None = None
+
+        async def _fire_utterance_end() -> None:
+            settings = get_settings()
+            timeout_s = settings.voice_endpointing_ms / 1000
+            await asyncio.sleep(timeout_s)
+            final_text = self._transcript_buffer.strip()
+            self._transcript_buffer = ""
+            if final_text:
+                await self._transcript_queue.put({
+                    "type": "utterance_end",
+                    "text": final_text,
+                })
+
         try:
             async for msg in self._deepgram_ws:
                 if isinstance(msg, ListenV1Results):
@@ -152,8 +171,13 @@ class VoiceSession:
                         continue
 
                     is_final = bool(msg.is_final)
+
+                    if utterance_timer and not utterance_timer.done():
+                        utterance_timer.cancel()
+
                     if is_final:
                         self._transcript_buffer += (" " + transcript).lstrip()
+                        utterance_timer = asyncio.create_task(_fire_utterance_end())
 
                     await self._transcript_queue.put({
                         "type": "transcript_partial" if not is_final else "transcript_interim_final",
@@ -162,6 +186,8 @@ class VoiceSession:
                     })
 
                 elif isinstance(msg, ListenV1UtteranceEnd):
+                    if utterance_timer and not utterance_timer.done():
+                        utterance_timer.cancel()
                     final_text = self._transcript_buffer.strip()
                     self._transcript_buffer = ""
                     if final_text:
@@ -176,6 +202,9 @@ class VoiceSession:
                     "type": "error",
                     "text": "ASR connection error",
                 })
+        finally:
+            if utterance_timer and not utterance_timer.done():
+                utterance_timer.cancel()
 
     async def send_audio(self, audio_bytes: bytes) -> None:
         """Forward raw PCM audio bytes to the Deepgram connection."""
