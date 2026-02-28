@@ -94,12 +94,15 @@ class TestProcessVoice:
             "detected_language": "en",
             "duration_ms": 500.0,
         }
-        mock_agent.return_value = AgentResponse(
-            response_text="Your balance is 245,000 FCFA.",
-            language_detected=Language.EN,
-            tools_used=[],
-            groundedness_score=None,
-            latency_ms={"total_ms": 200.0, "language_detection_ms": 50.0},
+        mock_agent.return_value = (
+            AgentResponse(
+                response_text="Your balance is 245,000 FCFA.",
+                language_detected=Language.EN,
+                tools_used=[],
+                groundedness_score=None,
+                latency_ms={"total_ms": 200.0, "language_detection_ms": 50.0},
+            ),
+            [],
         )
         mock_tts.return_value = {
             "audio_bytes": b"audio",

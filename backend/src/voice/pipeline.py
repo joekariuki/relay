@@ -158,7 +158,7 @@ async def process_voice(
     # Lazy import: avoids circular import between voice and agent modules
     from src.agent.core import process_message
 
-    agent_result = await process_message(
+    agent_result, _messages = await process_message(
         message=transcript,
         account_id=account_id,
     )
