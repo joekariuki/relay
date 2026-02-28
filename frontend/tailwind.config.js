@@ -19,6 +19,9 @@ export default {
           900: "#064e3b",
         },
       },
+      animation: {
+        "spin-slow": "spin 3s linear infinite",
+      },
       typography: {
         chat: {
           css: {
