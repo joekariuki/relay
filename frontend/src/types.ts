@@ -69,6 +69,7 @@ export interface StreamDonePayload {
   tools_used: ToolCall[];
   groundedness_score: number | null;
   latency_ms: Record<string, number>;
+  session_id?: string;
 }
 
 export interface StreamCallbacks {

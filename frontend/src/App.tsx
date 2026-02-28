@@ -17,6 +17,7 @@ function App() {
     statusMessage,
     accountId,
     language,
+    sessionId: _sessionId,
     setAccountId,
     setLanguage,
     sendMessage,
@@ -24,6 +25,17 @@ function App() {
   } = useChat();
 
   const [input, setInput] = useState("");
+
+  const handleAccountChange = useCallback(
+    (newAccountId: string) => {
+      if (newAccountId !== accountId) {
+        clearMessages();
+        setVoiceMessages([]);
+      }
+      setAccountId(newAccountId);
+    },
+    [accountId, clearMessages, setAccountId],
+  );
 
   const handleVoiceMessages = useCallback(
     (userMsg: ChatMessage, assistantMsg: ChatMessage) => {
@@ -91,7 +103,7 @@ function App() {
           </div>
           <div className="flex items-center gap-3">
             <LanguageSelector language={language} onChange={setLanguage} />
-            <AccountSelector accountId={accountId} onChange={setAccountId} />
+            <AccountSelector accountId={accountId} onChange={handleAccountChange} />
             {allMessages.length > 0 && (
               <button
                 onClick={handleClear}

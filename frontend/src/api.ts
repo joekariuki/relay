@@ -39,6 +39,7 @@ export function streamChatMessage(
   accountId: string,
   language: string | null,
   callbacks: StreamCallbacks,
+  sessionId: string | null = null,
 ): AbortController {
   const controller = new AbortController();
 
@@ -48,6 +49,9 @@ export function streamChatMessage(
   };
   if (language) {
     body.language = language;
+  }
+  if (sessionId) {
+    body.session_id = sessionId;
   }
 
   (async () => {
@@ -127,6 +131,10 @@ export function streamChatMessage(
   })();
 
   return controller;
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  await fetch(`${BASE_URL}/sessions/${sessionId}`, { method: "DELETE" });
 }
 
 export async function sendVoiceMessage(
