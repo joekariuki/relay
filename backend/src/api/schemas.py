@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    """Request body for the /chat endpoint."""
+    """Request body for the /chat and /chat/stream endpoints."""
 
     message: str = Field(..., min_length=1, max_length=2000, description="User message text")
     account_id: str = Field(default="acc_001", description="DuniaWallet account ID")
@@ -14,6 +14,10 @@ class ChatRequest(BaseModel):
         default=None,
         pattern=r"^(en|fr|sw)$",
         description="Language hint (en, fr, sw). Auto-detected if not provided.",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Session ID for conversation continuity. Auto-created if not provided.",
     )
 
 
@@ -30,6 +34,7 @@ class ChatResponse(BaseModel):
     """Response body for the /chat endpoint."""
 
     response: str
+    session_id: str
     language_detected: str
     tools_used: list[ToolCallInfo]
     groundedness_score: float | None = None

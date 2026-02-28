@@ -96,15 +96,30 @@ async def health() -> HealthResponse:
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """Process a text message through the agent pipeline."""
-    # Lazy import: agent core deferred to keep server startup fast
     from src.agent.core import process_message
+    from src.session import get_session_store
+
+    store = get_session_store()
 
     try:
-        result, _messages = await process_message(
+        session_id = request.session_id
+        message_history = None
+
+        if session_id:
+            message_history = store.get_messages(session_id)
+            if message_history is None:
+                session_id = store.create_session(request.account_id)
+        else:
+            session_id = store.create_session(request.account_id)
+
+        result, all_messages = await process_message(
             message=request.message,
             account_id=request.account_id,
             language_hint=request.language,
+            message_history=message_history,
         )
+
+        store.update_messages(session_id, all_messages)
 
         tools_info = [
             ToolCallInfo(
@@ -118,6 +133,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         return ChatResponse(
             response=result.response_text,
+            session_id=session_id,
             language_detected=result.language_detected.value,
             tools_used=tools_info,
             groundedness_score=result.groundedness_score,
@@ -133,18 +149,60 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     """Stream a chat response as Server-Sent Events."""
-    # Lazy import: agent core deferred to keep server startup fast
-    from src.agent.core import process_message_stream
+    from src.agent.core import StreamContext, process_message_stream
+    from src.session import get_session_store
 
-    return StreamingResponse(
-        process_message_stream(
+    store = get_session_store()
+
+    session_id = request.session_id
+    message_history = None
+
+    if session_id:
+        message_history = store.get_messages(session_id)
+        if message_history is None:
+            session_id = store.create_session(request.account_id)
+    else:
+        session_id = store.create_session(request.account_id)
+
+    ctx = StreamContext()
+
+    async def event_generator() -> AsyncIterator[str]:
+        async for event in process_message_stream(
             message=request.message,
             account_id=request.account_id,
             language_hint=request.language,
-        ),
+            message_history=message_history,
+            stream_context=ctx,
+        ):
+            # Inject session_id into the done event before yielding
+            if event.startswith("event: done"):
+                import json
+                lines = event.strip().split("\n")
+                data_line = lines[1]
+                payload = json.loads(data_line.removeprefix("data: "))
+                payload["session_id"] = session_id
+                event = f"event: done\ndata: {json.dumps(payload)}\n\n"
+            yield event
+        if ctx.all_messages:
+            store.update_messages(session_id, ctx.all_messages)
+
+    return StreamingResponse(
+        event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str) -> JSONResponse:
+    """Delete a conversation session."""
+    from src.session import get_session_store
+
+    store = get_session_store()
+    deleted = store.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return JSONResponse({"status": "deleted", "session_id": session_id})
 
 
 @app.post("/voice", response_model=VoiceResponse)
