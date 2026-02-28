@@ -26,11 +26,16 @@ export function ChatWindow({ messages, isLoading, isStreaming, statusMessage }: 
         <div className="flex justify-start mb-3">
           <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-relay-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-relay-500" />
-              </span>
-              <span className="text-sm text-gray-500 animate-pulse">
+              <svg
+                className="h-4 w-4 animate-spin text-gray-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-gray-500">
                 {statusMessage || "Processing..."}
               </span>
             </div>
