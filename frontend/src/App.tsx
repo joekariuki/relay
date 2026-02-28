@@ -1,12 +1,15 @@
+import { Phone } from "lucide-react";
 import { useCallback, useState } from "react";
 import { AccountSelector } from "./components/AccountSelector";
 import { ChatWindow } from "./components/ChatWindow";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { RecordingPanel } from "./components/RecordingPanel";
 import { SampleQueries } from "./components/SampleQueries";
+import { VoiceModeOverlay } from "./components/VoiceModeOverlay";
 import { VoiceRecorder } from "./components/VoiceRecorder";
 import { useChat } from "./hooks/useChat";
 import { useVoice } from "./hooks/useVoice";
+import { useVoiceMode } from "./hooks/useVoiceMode";
 import type { ChatMessage } from "./types";
 
 function App() {
@@ -17,7 +20,7 @@ function App() {
     statusMessage,
     accountId,
     language,
-    sessionId: _sessionId,
+    sessionId,
     setAccountId,
     setLanguage,
     sendMessage,
@@ -65,6 +68,19 @@ function App() {
     sendRecording,
     stopAndSend,
   } = useVoice(accountId, handleVoiceMessages, handleVoiceError);
+
+  const {
+    voiceModeState,
+    partialTranscript,
+    finalTranscript,
+    agentText,
+    statusMessage: voiceModeStatus,
+    turnMetadata,
+    startVoiceMode,
+    endVoiceMode,
+  } = useVoiceMode();
+
+  const isVoiceModeActive = voiceModeState !== "idle";
 
   const isActive = recordingState.status !== "idle";
   const isProcessing = recordingState.status === "processing";
@@ -155,6 +171,14 @@ function App() {
               onSubmit={handleSubmit}
               className="flex items-center gap-2"
             >
+              <button
+                onClick={() => startVoiceMode(accountId, language === "auto" ? "auto" : language, sessionId ?? undefined)}
+                disabled={isLoading || isStreaming}
+                className="w-10 h-10 rounded-full bg-relay-600 hover:bg-relay-700 disabled:bg-gray-200 flex items-center justify-center transition-colors"
+                title="Start voice mode"
+              >
+                <Phone className="w-4 h-4 text-white" />
+              </button>
               <VoiceRecorder onStart={startRecording} />
               <input
                 type="text"
@@ -186,6 +210,19 @@ function App() {
       <footer className="text-center py-2 text-xs text-gray-400">
         Relay Demo &mdash; DuniaWallet Support Agent
       </footer>
+
+      {/* Voice Mode Overlay */}
+      {isVoiceModeActive && (
+        <VoiceModeOverlay
+          voiceModeState={voiceModeState}
+          partialTranscript={partialTranscript}
+          finalTranscript={finalTranscript}
+          agentText={agentText}
+          statusMessage={voiceModeStatus}
+          turnMetadata={turnMetadata}
+          onEnd={endVoiceMode}
+        />
+      )}
     </div>
   );
 }
