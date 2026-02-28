@@ -7,6 +7,7 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 ## Features
 
 - **Tool-use agent** — Claude Sonnet via Pydantic AI orchestrates 7 tools (balance checks, transactions, fees, agent lookup, policies, support tickets) through a multi-turn conversation loop
+- **Conversation memory** — Session-based history using pydantic-ai's native `message_history` with in-memory store, TTL expiry, and automatic history pruning to bound token usage
 - **Streaming responses** — Server-Sent Events (SSE) via pydantic-ai's `run_stream()` deliver tokens progressively for real-time chat UX
 - **Multilingual support** — English, French, and Swahili with automatic language detection and code-switching handling (e.g. "Nataka ku-check balance yangu")
 - **Voice pipeline** — Whisper ASR for speech-to-text, language-specific TTS voices (alloy/nova/echo), full latency tracking at every stage
@@ -94,6 +95,7 @@ relay/
 ├── backend/
 │   ├── src/
 │   │   ├── config.py              # Environment config (pydantic-settings)
+│   │   ├── session.py             # In-memory session store with TTL
 │   │   ├── agent/
 │   │   │   ├── core.py            # Pydantic AI Agent with @tool decorators + orchestration
 │   │   │   ├── tools.py           # 7 tool handler implementations
@@ -168,14 +170,22 @@ Open **http://localhost:5173** — the Vite dev server proxies `/api/*` requests
 | `POST` | `/chat` | Text message → agent response with tool calls and latency |
 | `POST` | `/chat/stream` | SSE streaming — tokens delivered progressively via `text_delta` events |
 | `POST` | `/voice` | Audio upload (multipart) → ASR → agent → optional TTS |
+| `DELETE` | `/sessions/{id}` | Delete a conversation session |
 | `POST` | `/eval` | Run evaluation suite (optional: `category`, `max_cases`) |
 
 **Example:**
 
 ```bash
+# First message (auto-creates a session)
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is my balance?", "account_id": "acc_001"}'
+# Response includes session_id — pass it back for multi-turn conversations
+
+# Follow-up with conversation context
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What is the fee to send half of that to Mali?", "account_id": "acc_001", "session_id": "<session_id>"}'
 ```
 
 ## Running Evaluations
@@ -221,6 +231,26 @@ curl -X POST http://localhost:8000/eval \
 | `get_policy` | Service policies by topic, with keyword search fallback |
 | `create_support_ticket` | Escalate to human support with category and priority |
 
+## Conversation Memory
+
+The agent maintains context across turns within a session. When a user asks "What was that number again?" after a balance check, the agent recalls the balance without making another tool call.
+
+**How it works:**
+
+- Each conversation is assigned a `session_id` (auto-generated on first request, returned in every response)
+- Message history is stored server-side in an in-memory session store using pydantic-ai's native `ModelMessage` format
+- On each request, the full conversation history is loaded and passed to `Agent.run()` / `Agent.iter()` via the `message_history` parameter
+- After the agent responds, the updated history (including the new exchange) is persisted back to the store
+- Sessions expire after 30 minutes of inactivity (configurable via `SESSION_TTL_MINUTES`)
+- A `history_processors` cap prevents unbounded token growth by keeping only the most recent N message pairs (configurable via `SESSION_MAX_HISTORY`, default 20)
+
+**Session lifecycle:**
+
+1. **Create** — Automatic on first `/chat` or `/chat/stream` request without a `session_id`
+2. **Continue** — Pass the returned `session_id` in subsequent requests
+3. **Clear** — `DELETE /sessions/{session_id}` (frontend does this on "Clear chat" or account switch)
+4. **Expire** — Automatic cleanup after TTL
+
 ## Supported Languages
 
 | Language | Detection | Voice | Test Coverage |
@@ -262,7 +292,7 @@ This project is a demo. Here's what a production system handling 10M+ interactio
 
 **Infrastructure:** PostgreSQL/CockroachDB for accounts and transactions, Redis for session state and rate limiting, async task queue (Celery/Temporal) for eval runs, structured observability with OpenTelemetry, Kubernetes for horizontal scaling.
 
-**Agent improvements:** Conversation memory across sessions, A/B testing framework for prompt variants, retrieval-augmented generation (RAG) over a real policy knowledge base instead of hardcoded documents, fine-tuned language detection for low-resource languages.
+**Agent improvements:** Persistent conversation memory across sessions (Redis/PostgreSQL-backed instead of in-memory), A/B testing framework for prompt variants, retrieval-augmented generation (RAG) over a real policy knowledge base instead of hardcoded documents, fine-tuned language detection for low-resource languages.
 
 **Voice at scale:** Real-time streaming ASR (WebSocket-based) instead of batch transcription, voice activity detection to trim silence, latency budgets per pipeline stage with SLOs, fallback TTS engines for reliability, on-device wake word detection for mobile.
 
