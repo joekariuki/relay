@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 30
     session_max_history: int = 20
 
+    # Voice streaming settings
+    deepgram_api_key: str = ""
+    voice_tts_model: str = "tts-1"
+    voice_endpointing_ms: int = 800
+
     # Eval judge model
     eval_model: str = "anthropic:claude-haiku-4-5-20251001"
 
