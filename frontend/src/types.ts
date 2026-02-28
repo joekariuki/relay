@@ -79,3 +79,31 @@ export interface StreamCallbacks {
   onError: (message: string) => void;
   onStatus?: (message: string) => void;
 }
+
+// --- Voice Mode Types ---
+
+export type VoiceModeState =
+  | "idle"
+  | "connecting"
+  | "listening"
+  | "processing"
+  | "speaking";
+
+export interface VoiceModeMessage {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface VoiceModeTurnMetadata {
+  session_id: string;
+  language_detected: string;
+  tools_used: ToolCall[];
+  groundedness_score: number | null;
+  latency_ms: Record<string, number>;
+}
+
+export interface VoiceModeTurn {
+  userTranscript: string;
+  agentResponse: string;
+  metadata: VoiceModeTurnMetadata;
+}
