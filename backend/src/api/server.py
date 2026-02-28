@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -247,6 +250,207 @@ async def voice(
     except Exception:
         logger.error("Voice endpoint failed", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.websocket("/ws/voice")
+async def voice_stream(websocket: WebSocket) -> None:
+    """Real-time voice mode over WebSocket.
+
+    Protocol: client sends session_start JSON, then binary PCM audio frames.
+    Server streams back transcript events, agent responses, and TTS audio.
+    """
+    from openai import AsyncOpenAI
+    from src.agent.core import StreamContext, stream_agent_response
+    from src.session import get_session_store
+    from src.voice.realtime import VoiceSession, split_sentences, synthesize_sentence
+
+    await websocket.accept()
+    settings = get_settings()
+    store = get_session_store()
+    voice_session: VoiceSession | None = None
+
+    try:
+        init_data = await websocket.receive_json()
+        if init_data.get("type") != "session_start":
+            await websocket.send_json({"type": "error", "message": "Expected session_start message"})
+            await websocket.close()
+            return
+
+        account_id = init_data.get("account_id", "acc_001")
+        language = init_data.get("language", "auto")
+        session_id = init_data.get("session_id")
+
+        message_history = None
+        if session_id:
+            message_history = store.get_messages(session_id)
+            if message_history is None:
+                session_id = store.create_session(account_id)
+        else:
+            session_id = store.create_session(account_id)
+
+        await websocket.send_json({"type": "session_started", "session_id": session_id})
+
+        voice_session = VoiceSession(
+            account_id=account_id,
+            session_id=session_id,
+            language=language if language != "auto" else "en",
+        )
+        await voice_session.connect_asr()
+        await websocket.send_json({"type": "listening"})
+
+        async def inbound_loop() -> None:
+            """Read frames from the client: binary=audio, text=JSON control."""
+            while True:
+                msg = await websocket.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    break
+                if "bytes" in msg and msg["bytes"]:
+                    await voice_session.send_audio(msg["bytes"])
+                elif "text" in msg and msg["text"]:
+                    data = json.loads(msg["text"])
+                    if data.get("type") == "session_end":
+                        break
+
+        async def outbound_loop() -> None:
+            """Poll Deepgram transcripts and drive the agent + TTS pipeline."""
+            nonlocal message_history
+            while True:
+                event = await voice_session.get_transcript_event(timeout=0.1)
+                if event is None:
+                    continue
+
+                if event["type"] == "transcript_partial":
+                    await websocket.send_json({
+                        "type": "transcript_partial",
+                        "text": event["text"],
+                    })
+
+                elif event["type"] == "transcript_interim_final":
+                    await websocket.send_json({
+                        "type": "transcript_partial",
+                        "text": event["text"],
+                    })
+
+                elif event["type"] == "utterance_end":
+                    final_text = event["text"]
+                    await websocket.send_json({
+                        "type": "transcript_final",
+                        "text": final_text,
+                    })
+
+                    t_start = time.perf_counter()
+                    latency: dict[str, float] = {}
+
+                    message_history = store.get_messages(session_id) or []
+                    ctx = StreamContext()
+
+                    accumulated_text = ""
+                    tools_used: list[dict[str, object]] = []
+                    language_detected = "en"
+
+                    async for stream_event in stream_agent_response(
+                        message=final_text,
+                        account_id=account_id,
+                        language_hint=language if language != "auto" else None,
+                        message_history=message_history,
+                        stream_context=ctx,
+                    ):
+                        if stream_event.type == "status":
+                            await websocket.send_json({
+                                "type": "agent_status",
+                                "message": stream_event.data.get("message", ""),
+                            })
+                        elif stream_event.type == "text_delta":
+                            chunk = str(stream_event.data.get("chunk", ""))
+                            accumulated_text += chunk
+                            await websocket.send_json({
+                                "type": "agent_text_delta",
+                                "chunk": chunk,
+                            })
+                        elif stream_event.type == "done":
+                            language_detected = str(stream_event.data.get("language_detected", "en"))
+                            tools_used = list(stream_event.data.get("tools_used", []))  # type: ignore[arg-type]
+                            latency.update(stream_event.data.get("latency_ms", {}))  # type: ignore[arg-type]
+                        elif stream_event.type == "error":
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": str(stream_event.data.get("message", "Agent error")),
+                            })
+
+                    if ctx.all_messages:
+                        store.update_messages(session_id, ctx.all_messages)
+
+                    latency["agent_processing_ms"] = (time.perf_counter() - t_start) * 1000
+
+                    if accumulated_text and settings.openai_api_key:
+                        t_tts = time.perf_counter()
+                        openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+                        sentences = split_sentences(accumulated_text)
+                        tts_first_chunk_sent = False
+
+                        for sentence in sentences:
+                            try:
+                                tts_result = await synthesize_sentence(
+                                    openai_client,
+                                    sentence,
+                                    language=language_detected,
+                                    model=settings.voice_tts_model,
+                                )
+                                await websocket.send_json({
+                                    "type": "audio_chunk",
+                                    "data": tts_result["audio_base64"],
+                                })
+                                if not tts_first_chunk_sent:
+                                    latency["tts_first_chunk_ms"] = (time.perf_counter() - t_tts) * 1000
+                                    tts_first_chunk_sent = True
+                            except Exception:
+                                logger.warning("TTS synthesis failed for sentence", exc_info=True)
+
+                        latency["tts_total_ms"] = (time.perf_counter() - t_tts) * 1000
+
+                    latency["total_e2e_ms"] = (time.perf_counter() - t_start) * 1000
+
+                    await websocket.send_json({
+                        "type": "turn_done",
+                        "session_id": session_id,
+                        "language_detected": language_detected,
+                        "tools_used": tools_used,
+                        "groundedness_score": None,
+                        "latency_ms": latency,
+                    })
+                    await websocket.send_json({"type": "listening"})
+
+                elif event["type"] == "error":
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": event.get("text", "ASR error"),
+                    })
+
+        inbound_task = asyncio.create_task(inbound_loop())
+        outbound_task = asyncio.create_task(outbound_loop())
+
+        done, pending = await asyncio.wait(
+            [inbound_task, outbound_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    except WebSocketDisconnect:
+        logger.info("Voice WebSocket disconnected (session=%s)", voice_session.session_id if voice_session else "unknown")
+    except Exception:
+        logger.error("Voice WebSocket error", exc_info=True)
+        try:
+            await websocket.send_json({"type": "error", "message": "Internal server error"})
+        except Exception:
+            pass
+    finally:
+        if voice_session:
+            await voice_session.close()
 
 
 @app.post("/eval", response_model=EvalResponse)
