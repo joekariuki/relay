@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic_ai import Agent, RunContext, UsageLimits
+from pydantic_ai.messages import ModelMessage
 from pydantic_ai.settings import ModelSettings
 from pydantic_graph import End
 
@@ -97,6 +98,13 @@ class AgentDeps:
     account_id: str
     language: str
     tool_records: list[ToolCallRecord] = field(default_factory=list)
+
+
+@dataclass
+class StreamContext:
+    """Mutable container populated by process_message_stream with the final message history."""
+
+    all_messages: list[ModelMessage] = field(default_factory=list)
 
 
 # Module-level agent instance — model provided at run time via agent.run(model=...)
@@ -241,20 +249,23 @@ async def process_message(
     message: str,
     account_id: str = "acc_001",
     language_hint: str | None = None,
-) -> AgentResponse:
+    message_history: list[ModelMessage] | None = None,
+) -> tuple[AgentResponse, list[ModelMessage]]:
     """Process a user message through the full agent pipeline.
 
     Args:
         message: The user's message text.
         account_id: The DuniaWallet account ID for context.
         language_hint: Optional language hint ("en", "fr", "sw").
+        message_history: Prior conversation messages for multi-turn context.
 
     Returns:
-        An AgentResponse with the response text, tools used, and metadata.
+        A tuple of (AgentResponse, updated message history).
     """
     settings = get_settings()
     latency: dict[str, float] = {}
     metadata: dict[str, object] = {}
+    all_messages: list[ModelMessage] = []
 
     # === Stage 1: Guardrails ===
     t0 = time.perf_counter()
@@ -304,8 +315,10 @@ async def process_message(
             usage_limits=UsageLimits(
                 request_limit=settings.agent_max_tool_rounds + 1,
             ),
+            message_history=message_history or [],
         )
         response_text = result.output
+        all_messages = result.all_messages()
 
     except Exception:
         logger.error("Agent processing failed", exc_info=True)
@@ -319,13 +332,16 @@ async def process_message(
 
     response_text = clean_response_text(response_text)
 
-    return AgentResponse(
-        response_text=response_text,
-        language_detected=_language_code_to_enum(lang_result.language),
-        tools_used=deps.tool_records,
-        groundedness_score=None,
-        latency_ms=latency,
-        metadata=metadata,
+    return (
+        AgentResponse(
+            response_text=response_text,
+            language_detected=_language_code_to_enum(lang_result.language),
+            tools_used=deps.tool_records,
+            groundedness_score=None,
+            latency_ms=latency,
+            metadata=metadata,
+        ),
+        all_messages,
     )
 
 
@@ -338,6 +354,8 @@ async def process_message_stream(
     message: str,
     account_id: str = "acc_001",
     language_hint: str | None = None,
+    message_history: list[ModelMessage] | None = None,
+    stream_context: StreamContext | None = None,
 ) -> AsyncIterator[str]:
     """Process a user message and stream the response as SSE events.
 
@@ -350,6 +368,9 @@ async def process_message_stream(
         message: The user's message text.
         account_id: The DuniaWallet account ID for context.
         language_hint: Optional language hint ("en", "fr", "sw").
+        message_history: Prior conversation messages for multi-turn context.
+        stream_context: If provided, populated with the final message history
+            after streaming completes (for the caller to persist).
     """
     settings = get_settings()
     latency: dict[str, float] = {}
@@ -405,6 +426,7 @@ async def process_message_stream(
             usage_limits=UsageLimits(
                 request_limit=settings.agent_max_tool_rounds + 1,
             ),
+            message_history=message_history or [],
         ) as agent_run:
             node = agent_run.next_node
             while not isinstance(node, End):
@@ -420,6 +442,9 @@ async def process_message_stream(
                         yield _sse_event("status", {"message": msg})
                 node = await agent_run.next(node)
 
+            if stream_context is not None:
+                stream_context.all_messages = agent_run.result.all_messages()
+
         yield _sse_event("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["preparing"], lang)})
         accumulated_text = clean_response_text("".join(pending_chunks))
         if accumulated_text:
@@ -428,7 +453,6 @@ async def process_message_stream(
         latency["agent_processing_ms"] = (time.perf_counter() - t2) * 1000
         latency["total_ms"] = (time.perf_counter() - t0) * 1000
 
-        # Build tool call info for the done event
         tools_info = [
             {
                 "tool_name": t.tool_name,

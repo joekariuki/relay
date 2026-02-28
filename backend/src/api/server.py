@@ -100,7 +100,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     from src.agent.core import process_message
 
     try:
-        result = await process_message(
+        result, _messages = await process_message(
             message=request.message,
             account_id=request.account_id,
             language_hint=request.language,
