@@ -19,22 +19,25 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def _mock_agent_response() -> AgentResponse:
-    """Create a mock agent response for testing."""
-    return AgentResponse(
-        response_text="Your balance is 245,000 FCFA.",
-        language_detected=Language.EN,
-        tools_used=[
-            ToolCallRecord(
-                tool_name="check_balance",
-                arguments={"account_id": "acc_001"},
-                result={"balance_cfa": 245000, "name": "Amadou Diallo"},
-                duration_ms=1.5,
-            )
-        ],
-        groundedness_score=None,
-        latency_ms={"total_ms": 150.0, "agent_processing_ms": 120.0},
-        metadata={"language_detected": "en"},
+def _mock_agent_response() -> tuple[AgentResponse, list]:
+    """Create a mock agent response tuple for testing."""
+    return (
+        AgentResponse(
+            response_text="Your balance is 245,000 FCFA.",
+            language_detected=Language.EN,
+            tools_used=[
+                ToolCallRecord(
+                    tool_name="check_balance",
+                    arguments={"account_id": "acc_001"},
+                    result={"balance_cfa": 245000, "name": "Amadou Diallo"},
+                    duration_ms=1.5,
+                )
+            ],
+            groundedness_score=None,
+            latency_ms={"total_ms": 150.0, "agent_processing_ms": 120.0},
+            metadata={"language_detected": "en"},
+        ),
+        [],
     )
 
 
@@ -72,6 +75,7 @@ class TestChat:
         assert response.status_code == 200
         data = response.json()
         assert "response" in data
+        assert "session_id" in data
         assert "language_detected" in data
         assert "tools_used" in data
         assert "latency_ms" in data
@@ -85,6 +89,7 @@ class TestChat:
         }).json()
         assert data["response"] == "Your balance is 245,000 FCFA."
         assert data["language_detected"] == "en"
+        assert isinstance(data["session_id"], str)
         assert len(data["tools_used"]) == 1
         assert data["tools_used"][0]["tool_name"] == "check_balance"
 
@@ -136,6 +141,58 @@ class TestChat:
         mock_process.assert_called_once()
         call_kwargs = mock_process.call_args
         assert call_kwargs.kwargs.get("account_id") == "acc_001" or call_kwargs.args[1] == "acc_001"
+
+
+class TestChatSession:
+    @patch("src.agent.core.process_message", new_callable=AsyncMock)
+    def test_chat_returns_session_id(self, mock_process: AsyncMock, client: TestClient) -> None:
+        mock_process.return_value = _mock_agent_response()
+        data = client.post("/chat", json={"message": "Hi"}).json()
+        assert "session_id" in data
+        assert isinstance(data["session_id"], str)
+
+    @patch("src.agent.core.process_message", new_callable=AsyncMock)
+    def test_chat_with_session_id_passes_history(
+        self, mock_process: AsyncMock, client: TestClient
+    ) -> None:
+        mock_process.return_value = _mock_agent_response()
+        # First request creates a session
+        data1 = client.post("/chat", json={"message": "Balance?"}).json()
+        sid = data1["session_id"]
+        # Second request reuses the session
+        data2 = client.post("/chat", json={
+            "message": "What was that?",
+            "session_id": sid,
+        }).json()
+        assert data2["session_id"] == sid
+        # Verify process_message was called with message_history kwarg
+        assert mock_process.call_count == 2
+        second_call = mock_process.call_args_list[1]
+        assert "message_history" in second_call.kwargs
+
+    @patch("src.agent.core.process_message", new_callable=AsyncMock)
+    def test_chat_invalid_session_id_creates_new(
+        self, mock_process: AsyncMock, client: TestClient
+    ) -> None:
+        mock_process.return_value = _mock_agent_response()
+        data = client.post("/chat", json={
+            "message": "Hi",
+            "session_id": "expired_or_invalid",
+        }).json()
+        assert data["session_id"] != "expired_or_invalid"
+
+    def test_delete_session_returns_200(self, client: TestClient) -> None:
+        from src.session import get_session_store
+
+        store = get_session_store()
+        sid = store.create_session("acc_001")
+        response = client.delete(f"/sessions/{sid}")
+        assert response.status_code == 200
+        assert response.json()["status"] == "deleted"
+
+    def test_delete_nonexistent_session_returns_404(self, client: TestClient) -> None:
+        response = client.delete("/sessions/nonexistent_id")
+        assert response.status_code == 404
 
 
 class TestEval:
