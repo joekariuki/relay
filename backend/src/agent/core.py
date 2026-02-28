@@ -359,24 +359,25 @@ async def process_message(
     )
 
 
-def _sse_event(event: str, data: dict[str, object]) -> str:
-    """Format a Server-Sent Event string."""
-    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+@dataclass
+class StreamEvent:
+    """Transport-agnostic streaming event emitted by stream_agent_response."""
+
+    type: str
+    data: dict[str, object]
 
 
-async def process_message_stream(
+async def stream_agent_response(
     message: str,
     account_id: str = "acc_001",
     language_hint: str | None = None,
     message_history: list[ModelMessage] | None = None,
     stream_context: StreamContext | None = None,
-) -> AsyncIterator[str]:
-    """Process a user message and stream the response as SSE events.
+) -> AsyncIterator[StreamEvent]:
+    """Stream the agent response as transport-agnostic events.
 
-    Yields SSE-formatted strings:
-        - event: text_delta — incremental text chunks
-        - event: done — final metadata (language, tools, latency)
-        - event: error — on failure
+    Yields StreamEvent objects with types: status, text_delta, done, error.
+    Used by both the SSE endpoint and the WebSocket voice mode handler.
 
     Args:
         message: The user's message text.
@@ -388,16 +389,12 @@ async def process_message_stream(
     """
     settings = get_settings()
     latency: dict[str, float] = {}
-    metadata: dict[str, object] = {}
 
     try:
         # === Stage 1: Guardrails ===
         t0 = time.perf_counter()
         guardrail_result = check_guardrails(message)
         latency["guardrails_ms"] = (time.perf_counter() - t0) * 1000
-
-        metadata["guardrail_flags"] = guardrail_result.flags
-        metadata["guardrail_safe"] = guardrail_result.safe
 
         if guardrail_result.injection_detected:
             logger.warning(
@@ -426,11 +423,10 @@ async def process_message_stream(
         # === Stage 3: Stream Agent Response ===
         t2 = time.perf_counter()
         deps = AgentDeps(account_id=account_id, language=lang_result.language)
-
         lang = lang_result.language
-        yield _sse_event("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["analyzing"], lang)})
 
-        accumulated_text = ""
+        yield StreamEvent("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["analyzing"], lang)})
+
         pending_chunks: list[str] = []
         async with support_agent.iter(
             message,
@@ -453,16 +449,16 @@ async def process_message_stream(
                     for tc in node.model_response.tool_calls:
                         tool_msgs = _TOOL_STATUS_MESSAGES.get(tc.tool_name)
                         msg = _get_status(tool_msgs, lang) if tool_msgs else _get_status(_STAGE_STATUS_MESSAGES["processing"], lang)
-                        yield _sse_event("status", {"message": msg})
+                        yield StreamEvent("status", {"message": msg})
                 node = await agent_run.next(node)
 
             if stream_context is not None:
                 stream_context.all_messages = agent_run.result.all_messages()
 
-        yield _sse_event("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["preparing"], lang)})
+        yield StreamEvent("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["preparing"], lang)})
         accumulated_text = clean_response_text("".join(pending_chunks))
         if accumulated_text:
-            yield _sse_event("text_delta", {"chunk": accumulated_text})
+            yield StreamEvent("text_delta", {"chunk": accumulated_text})
 
         latency["agent_processing_ms"] = (time.perf_counter() - t2) * 1000
         latency["total_ms"] = (time.perf_counter() - t0) * 1000
@@ -477,7 +473,7 @@ async def process_message_stream(
             for t in deps.tool_records
         ]
 
-        yield _sse_event("done", {
+        yield StreamEvent("done", {
             "language_detected": lang_result.language,
             "tools_used": tools_info,
             "groundedness_score": None,
@@ -486,7 +482,33 @@ async def process_message_stream(
 
     except Exception:
         logger.error("Streaming agent processing failed", exc_info=True)
-        yield _sse_event("error", {
+        yield StreamEvent("error", {
             "message": "I'm sorry, I encountered an error processing your request. "
             "Please try again or contact support.",
         })
+
+
+def _sse_event(event: str, data: dict[str, object]) -> str:
+    """Format a Server-Sent Event string."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+async def process_message_stream(
+    message: str,
+    account_id: str = "acc_001",
+    language_hint: str | None = None,
+    message_history: list[ModelMessage] | None = None,
+    stream_context: StreamContext | None = None,
+) -> AsyncIterator[str]:
+    """Stream the agent response as SSE-formatted strings.
+
+    Thin wrapper around stream_agent_response() that formats events as SSE.
+    """
+    async for event in stream_agent_response(
+        message=message,
+        account_id=account_id,
+        language_hint=language_hint,
+        message_history=message_history,
+        stream_context=stream_context,
+    ):
+        yield _sse_event(event.type, event.data)
