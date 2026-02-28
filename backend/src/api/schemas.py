@@ -87,3 +87,87 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     environment: str
+
+
+# --- WebSocket Voice Mode Schemas ---
+
+
+class WSSessionStart(BaseModel):
+    """Client->Server: initialize a voice mode session."""
+
+    type: str = "session_start"
+    account_id: str = "acc_001"
+    language: str = "auto"
+    session_id: str | None = None
+
+
+class WSSessionEnd(BaseModel):
+    """Client->Server: close a voice mode session."""
+
+    type: str = "session_end"
+
+
+class WSSessionStarted(BaseModel):
+    """Server->Client: acknowledge voice mode session."""
+
+    type: str = "session_started"
+    session_id: str
+
+
+class WSListening(BaseModel):
+    """Server->Client: ready for speech input."""
+
+    type: str = "listening"
+
+
+class WSTranscriptPartial(BaseModel):
+    """Server->Client: interim ASR transcript."""
+
+    type: str = "transcript_partial"
+    text: str
+
+
+class WSTranscriptFinal(BaseModel):
+    """Server->Client: final ASR transcript (utterance complete)."""
+
+    type: str = "transcript_final"
+    text: str
+
+
+class WSAgentStatus(BaseModel):
+    """Server->Client: agent tool execution status."""
+
+    type: str = "agent_status"
+    message: str
+
+
+class WSAgentTextDelta(BaseModel):
+    """Server->Client: streaming agent text chunk."""
+
+    type: str = "agent_text_delta"
+    chunk: str
+
+
+class WSAudioChunk(BaseModel):
+    """Server->Client: TTS audio chunk."""
+
+    type: str = "audio_chunk"
+    data: str
+
+
+class WSTurnDone(BaseModel):
+    """Server->Client: voice turn complete with metadata."""
+
+    type: str = "turn_done"
+    session_id: str
+    language_detected: str
+    tools_used: list[ToolCallInfo]
+    groundedness_score: float | None = None
+    latency_ms: dict[str, float]
+
+
+class WSError(BaseModel):
+    """Server->Client: error message."""
+
+    type: str = "error"
+    message: str
