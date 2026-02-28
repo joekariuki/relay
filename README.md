@@ -11,6 +11,7 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 - **Streaming responses** — Server-Sent Events (SSE) via pydantic-ai's `run_stream()` deliver tokens progressively for real-time chat UX
 - **Multilingual support** — English, French, and Swahili with automatic language detection and code-switching handling (e.g. "Nataka ku-check balance yangu")
 - **Voice pipeline** — Whisper ASR for speech-to-text, language-specific TTS voices (alloy/nova/echo), full latency tracking at every stage
+- **Real-time voice mode** — WebSocket-based live voice conversation with Deepgram Nova-2 streaming ASR, built-in VAD, sentence-level OpenAI TTS streaming, and shared conversation context with text chat
 - **Evaluation framework** — 100+ curated test cases scored across 4 dimensions: groundedness, hallucination detection, compliance, and language quality
 - **Safety guardrails** — Prompt injection detection, PII flagging, account ID masking, and 10 explicit behavioral rules enforced via system prompt
 - **Low-literacy handling** — SMS-style queries ("bal pls", "hw mch 2 snd 50k") and abbreviated inputs
@@ -38,7 +39,7 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
                                                           └──────────────┘
 ```
 
-### Voice Pipeline
+### Voice Pipeline (Batch)
 
 ```
 ┌───────┐     ┌───────────┐     ┌─────────────────┐     ┌───────────┐     ┌───────┐
@@ -52,6 +53,20 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
                                                          │ sw: echo  │
                                                          │ tts_ms    │
                                                          └───────────┘
+```
+
+### Real-Time Voice Pipeline (WebSocket)
+
+```
+┌──────────┐  PCM   ┌───────────┐ partials ┌────────────┐ text  ┌───────────┐ mp3 chunks ┌──────────┐
+│ Browser  │──────>│ Deepgram  │────────>│ Agent       │─────>│ OpenAI    │──────────>│ Browser  │
+│ AudioWklt│  16kHz │ Nova-2    │  final  │ Pipeline    │      │ TTS       │           │ Playback │
+│ Capture  │  mono  │ (stream)  │────────>│ (stream_    │      │ (sentence │           │ Queue    │
+└──────────┘       │ +VAD      │         │  agent_     │      │  by       │           └──────────┘
+     ▲              └───────────┘         │  response)  │      │  sentence)│
+     │                                    └────────────┘      └───────────┘
+     │                                          │
+     └──── WebSocket (/ws/voice) ──────────────┘
 ```
 
 ### Evaluation Pipeline
@@ -86,7 +101,8 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 | Text-to-speech | OpenAI TTS (`tts-1`) |
 | Backend | Python 3.11+, FastAPI, Pydantic, `mypy --strict` |
 | Frontend | React 18, TypeScript (strict), Vite, Tailwind CSS |
-| Testing | pytest (157 tests), pytest-asyncio |
+| Streaming ASR | Deepgram Nova-2 (real-time WebSocket transcription) |
+| Testing | pytest (240 tests), pytest-asyncio |
 
 ## Project Structure
 
@@ -116,16 +132,18 @@ relay/
 │   │   │   ├── compliance.py      # Rule-based: no full IDs, no financial advice
 │   │   │   └── language_quality.py # LLM-as-judge: language correctness
 │   │   ├── voice/
-│   │   │   └── pipeline.py        # Whisper ASR → Agent → TTS
+│   │   │   ├── pipeline.py        # Whisper ASR → Agent → TTS (batch)
+│   │   │   └── realtime.py        # Deepgram streaming ASR → Agent → TTS (WebSocket)
 │   │   └── api/
-│   │       ├── server.py          # FastAPI endpoints
-│   │       └── schemas.py         # Request/response validation
-│   └── tests/                     # 157 unit tests
+│   │       ├── server.py          # FastAPI endpoints + /ws/voice WebSocket
+│   │       └── schemas.py         # Request/response/WebSocket message schemas
+│   └── tests/                     # 240 unit tests
 ├── frontend/
 │   └── src/
-│       ├── App.tsx                # Main layout
-│       ├── components/            # ChatWindow, DebugPanel, VoiceRecorder, etc.
-│       └── hooks/                 # useChat, useVoice
+│       ├── App.tsx                # Main layout + voice mode integration
+│       ├── audio/                 # AudioWorklet PCM capture processor
+│       ├── components/            # ChatWindow, DebugPanel, VoiceRecorder, VoiceModeOverlay
+│       └── hooks/                 # useChat, useVoice, useVoiceMode
 └── docs/
     └── design-decisions.md        # Architecture rationale
 ```
@@ -143,7 +161,8 @@ cd relay
 cd backend
 uv venv && uv pip install -e ".[dev]"
 cp .env.example .env
-# Edit .env — add your ANTHROPIC_API_KEY (required) and OPENAI_API_KEY (for voice)
+# Edit .env — add your ANTHROPIC_API_KEY (required), OPENAI_API_KEY (for voice/TTS),
+# and optionally DEEPGRAM_API_KEY (for real-time voice mode)
 
 # Frontend
 cd ../frontend
@@ -170,6 +189,7 @@ Open **http://localhost:5173** — the Vite dev server proxies `/api/*` requests
 | `POST` | `/chat` | Text message → agent response with tool calls and latency |
 | `POST` | `/chat/stream` | SSE streaming — tokens delivered progressively via `text_delta` events |
 | `POST` | `/voice` | Audio upload (multipart) → ASR → agent → optional TTS |
+| `WS` | `/ws/voice` | Real-time voice mode — bidirectional audio/transcript/agent streaming |
 | `DELETE` | `/sessions/{id}` | Delete a conversation session |
 | `POST` | `/eval` | Run evaluation suite (optional: `category`, `max_cases`) |
 
@@ -251,6 +271,24 @@ The agent maintains context across turns within a session. When a user asks "Wha
 3. **Clear** — `DELETE /sessions/{session_id}` (frontend does this on "Clear chat" or account switch)
 4. **Expire** — Automatic cleanup after TTL
 
+## Voice Mode
+
+Voice mode provides a real-time, call-like conversation with the agent. Instead of recording and sending audio in batches, users enter a persistent voice session where they speak naturally and hear the agent respond.
+
+**How it works:**
+
+1. User clicks the phone icon to enter voice mode
+2. A WebSocket connection opens to `/ws/voice`, establishing a Deepgram streaming ASR connection
+3. Microphone audio is captured via an AudioWorklet (16kHz mono PCM) and streamed to the backend in real-time
+4. Deepgram provides interim transcripts (displayed live) and triggers utterance-end via built-in VAD (800ms silence threshold)
+5. On utterance end, the agent processes the final transcript through the same pipeline as text chat
+6. The agent response is synthesized sentence-by-sentence via OpenAI TTS and streamed back as MP3 audio chunks
+7. Audio plays sequentially — the first sentence plays while subsequent sentences are still synthesizing
+
+**Session integration:** Voice mode shares conversation context with text chat via `session_id`. A user can type a question, switch to voice mode, and say "What was that number again?" — the agent has the full history.
+
+**Requirements:** A Deepgram API key (`DEEPGRAM_API_KEY` in `.env`) is required for voice mode. Sign up at [console.deepgram.com](https://console.deepgram.com) for a free tier with $200 in credits.
+
 ## Supported Languages
 
 | Language | Detection | Voice | Test Coverage |
@@ -266,7 +304,7 @@ Code-switching (e.g. "Nataka ku-check balance yangu") is detected and handled �
 ```bash
 cd backend
 
-# Unit tests (157 tests, no API keys needed)
+# Unit tests (240 tests, no API keys needed)
 uv run pytest tests/ -v
 
 # Type checking (strict mode, 29 source files)
@@ -294,7 +332,7 @@ This project is a demo. Here's what a production system handling 10M+ interactio
 
 **Agent improvements:** Persistent conversation memory across sessions (Redis/PostgreSQL-backed instead of in-memory), A/B testing framework for prompt variants, retrieval-augmented generation (RAG) over a real policy knowledge base instead of hardcoded documents, fine-tuned language detection for low-resource languages.
 
-**Voice at scale:** Real-time streaming ASR (WebSocket-based) instead of batch transcription, voice activity detection to trim silence, latency budgets per pipeline stage with SLOs, fallback TTS engines for reliability, on-device wake word detection for mobile.
+**Voice at scale:** Multi-region Deepgram endpoints for latency optimization, fallback TTS engines for reliability, on-device wake word detection for mobile, WebRTC for peer-to-peer audio with TURN server fallback, latency budgets per pipeline stage with SLOs.
 
 **Evaluation in CI:** Nightly eval runs against the full suite with regression alerts, cost tracking per eval run, human-in-the-loop review for edge cases the automated judges can't resolve, shadow mode to compare new model versions against production before rollout.
 
