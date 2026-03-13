@@ -56,7 +56,7 @@ class Account:
     id: str
     name: str
     phone: str
-    balance_cfa: int
+    balance: int
     currency: str
     account_type: str
     kyc_tier: KYCTier
@@ -71,8 +71,8 @@ class Transaction:
     id: str
     account_id: str
     type: TransactionType
-    amount_cfa: int
-    fee_cfa: int
+    amount: int
+    fee: int
     currency: str
     recipient_name: str | None
     recipient_phone: str | None

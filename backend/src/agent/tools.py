@@ -30,9 +30,9 @@ def _mask_account_id(account_id: str) -> str:
     return "****"
 
 
-def _format_cfa(amount: int) -> str:
-    """Format a CFA amount with thousands separator."""
-    return f"{amount:,} FCFA"
+def _format_amount(amount: int, currency: str = "XOF") -> str:
+    """Format an amount with thousands separator and currency code."""
+    return f"{amount:,} {currency}"
 
 
 def handle_check_balance(args: dict[str, Any]) -> dict[str, Any]:
@@ -48,8 +48,8 @@ def handle_check_balance(args: dict[str, Any]) -> dict[str, Any]:
     return {
         "account_id_masked": _mask_account_id(account_id),
         "name": account.name,
-        "balance": _format_cfa(account.balance_cfa),
-        "balance_cfa": account.balance_cfa,
+        "balance_formatted": _format_amount(account.balance, account.currency),
+        "balance": account.balance,
         "currency": account.currency,
         "account_type": account.account_type,
         "kyc_tier": account.kyc_tier.value,
@@ -77,9 +77,11 @@ def handle_get_transactions(args: dict[str, Any]) -> dict[str, Any]:
             {
                 "id": t.id,
                 "type": t.type.value,
-                "amount": _format_cfa(t.amount_cfa),
-                "amount_cfa": t.amount_cfa,
-                "fee": _format_cfa(t.fee_cfa),
+                "amount_formatted": _format_amount(t.amount, t.currency),
+                "amount": t.amount,
+                "fee_formatted": _format_amount(t.fee, t.currency),
+                "fee": t.fee,
+                "currency": t.currency,
                 "recipient": t.recipient_name or "N/A",
                 "description": t.description,
                 "status": t.status.value,
@@ -108,9 +110,11 @@ def handle_lookup_transaction(args: dict[str, Any]) -> dict[str, Any]:
             {
                 "id": t.id,
                 "type": t.type.value,
-                "amount": _format_cfa(t.amount_cfa),
-                "amount_cfa": t.amount_cfa,
-                "fee": _format_cfa(t.fee_cfa),
+                "amount_formatted": _format_amount(t.amount, t.currency),
+                "amount": t.amount,
+                "fee_formatted": _format_amount(t.fee, t.currency),
+                "fee": t.fee,
+                "currency": t.currency,
                 "recipient": t.recipient_name or "N/A",
                 "description": t.description,
                 "status": t.status.value,
@@ -138,17 +142,17 @@ def handle_calculate_fees(args: dict[str, Any]) -> dict[str, Any]:
     result = calculate_fee(amount, currency, destination)
     if result is None:
         return {
-            "error": f"No fee rule found for {_format_cfa(amount)} to {destination}. "
+            "error": f"No fee rule found for {_format_amount(amount, currency)} to {destination}. "
             "Amount may exceed maximum transfer limit."
         }
 
     return {
-        "amount": _format_cfa(result.amount),
-        "amount_cfa": result.amount,
-        "fee": _format_cfa(result.fee),
-        "fee_cfa": result.fee,
-        "total": _format_cfa(result.total),
-        "total_cfa": result.total,
+        "amount_formatted": _format_amount(result.amount, result.currency),
+        "amount": result.amount,
+        "fee_formatted": _format_amount(result.fee, result.currency),
+        "fee": result.fee,
+        "total_formatted": _format_amount(result.total, result.currency),
+        "total": result.total,
         "currency": result.currency,
         "corridor": result.corridor,
         "fee_percent": result.fee_percent,

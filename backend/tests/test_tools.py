@@ -17,8 +17,8 @@ class TestCheckBalance:
         result = handle_check_balance({"account_id": "acc_001"})
         assert result["account_id_masked"] == "****001"
         assert result["name"] == "Amadou Diallo"
-        assert result["balance_cfa"] == 245_000
-        assert "FCFA" in result["balance"]
+        assert result["balance"] == 245_000
+        assert "XOF" in result["balance_formatted"]
         assert result["kyc_tier"] == "standard"
 
     def test_invalid_account(self) -> None:
@@ -94,8 +94,8 @@ class TestCalculateFees:
             {"amount": 50_000, "currency": "XOF", "destination_country": "domestic"}
         )
         assert "error" not in result
-        assert result["fee_cfa"] > 0
-        assert result["total_cfa"] == result["amount_cfa"] + result["fee_cfa"]
+        assert result["fee"] > 0
+        assert result["total"] == result["amount"] + result["fee"]
         assert result["corridor"] == "domestic"
 
     def test_international_fee(self) -> None:

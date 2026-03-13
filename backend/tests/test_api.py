@@ -29,7 +29,7 @@ def _mock_agent_response() -> tuple[AgentResponse, list]:
                 ToolCallRecord(
                     tool_name="check_balance",
                     arguments={"account_id": "acc_001"},
-                    result={"balance_cfa": 245000, "name": "Amadou Diallo"},
+                    result={"balance": 245000, "name": "Amadou Diallo"},
                     duration_ms=1.5,
                 )
             ],

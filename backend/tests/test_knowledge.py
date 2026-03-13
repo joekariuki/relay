@@ -34,7 +34,7 @@ class TestAccounts:
             assert acc.id.startswith("acc_")
             assert len(acc.name) > 0
             assert acc.phone.startswith("+")
-            assert acc.balance_cfa >= 0
+            assert acc.balance >= 0
             assert acc.currency == "XOF"
             assert acc.account_type in ("personal", "business")
             assert isinstance(acc.kyc_tier, KYCTier)
@@ -45,7 +45,7 @@ class TestAccounts:
         acc = get_account("acc_001")
         assert acc is not None
         assert acc.name == "Amadou Diallo"
-        assert acc.balance_cfa == 245_000
+        assert acc.balance == 245_000
 
     def test_get_account_invalid(self) -> None:
         assert get_account("acc_999") is None
@@ -91,8 +91,8 @@ class TestTransactions:
         for txn in TRANSACTIONS:
             assert txn.id.startswith("txn_")
             assert isinstance(txn.type, TransactionType)
-            assert txn.amount_cfa > 0
-            assert txn.fee_cfa >= 0
+            assert txn.amount > 0
+            assert txn.fee >= 0
             assert txn.currency == "XOF"
             assert isinstance(txn.status, TransactionStatus)
             assert len(txn.timestamp) > 0
