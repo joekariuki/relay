@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     voice_tts_model: str = "tts-1"
     voice_endpointing_ms: int = 800
 
+    # RAG settings
+    use_rag: bool = True
+
     # Eval judge model
     eval_model: str = "anthropic:claude-haiku-4-5-20251001"
 

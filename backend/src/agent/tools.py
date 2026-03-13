@@ -16,7 +16,7 @@ from src.knowledge.accounts import get_account
 from src.knowledge.agents_data import find_agents
 from src.knowledge.fees import calculate_fee
 from src.knowledge.models import ToolCallRecord, format_currency
-from src.knowledge.policies import get_policy, search_policies
+from src.knowledge.policies import get_policy, search_policies  # noqa: F401
 from src.knowledge.transactions import get_transactions_for_account, lookup_transaction
 
 
@@ -192,27 +192,31 @@ def handle_find_agent(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_get_policy(args: dict[str, Any]) -> dict[str, Any]:
-    """Handle get_policy tool call."""
+    """Handle get_policy tool call.
+
+    Uses RAG semantic search when available, with fallback chain:
+    RAG -> keyword search -> exact topic match.
+    """
     topic = args.get("topic", "")
     if not topic:
-        # Try search instead
         return {"error": "topic is required. Use search_policies for keyword search."}
 
-    policy = get_policy(topic)
-    if policy is not None:
-        return {
-            "topic": policy.topic,
-            "title_en": policy.title_en,
-            "content_en": policy.content_en,
-            "title_fr": policy.title_fr,
-            "content_fr": policy.content_fr,
-        }
+    # Try RAG semantic search first
+    from src.knowledge.rag import query_policies_rag
 
-    # Fall back to keyword search
-    results = search_policies(topic)
-    if results:
+    rag_results = query_policies_rag(topic, top_k=3)
+    if rag_results:
+        if len(rag_results) == 1:
+            policy, score = rag_results[0]
+            return {
+                "topic": policy.topic,
+                "title_en": policy.title_en,
+                "content_en": policy.content_en,
+                "title_fr": policy.title_fr,
+                "content_fr": policy.content_fr,
+                "relevance_score": round(score, 3),
+            }
         return {
-            "note": f"No exact match for '{topic}', showing search results",
             "results": [
                 {
                     "topic": p.topic,
@@ -220,8 +224,9 @@ def handle_get_policy(args: dict[str, Any]) -> dict[str, Any]:
                     "content_en": p.content_en,
                     "title_fr": p.title_fr,
                     "content_fr": p.content_fr,
+                    "relevance_score": round(score, 3),
                 }
-                for p in results
+                for p, score in rag_results
             ],
         }
 

@@ -52,6 +52,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("ANTHROPIC_API_KEY not set - agent may fail if using Anthropic models")
     if settings.openai_api_key:
         os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
+
+    # Initialize RAG policy retrieval if configured
+    if settings.use_rag and settings.openai_api_key:
+        try:
+            from src.knowledge.rag import initialize_rag
+
+            initialize_rag(settings.openai_api_key)
+            logger.info("RAG policy retrieval initialized")
+        except Exception:
+            logger.exception("Failed to initialize RAG — policy search will use keyword fallback")
     yield
     logger.info("Shutting down Relay backend")
 
