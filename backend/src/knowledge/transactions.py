@@ -585,6 +585,290 @@ def _build_transactions() -> list[Transaction]:
             description="Aide Ibrahim", status=TransactionStatus.COMPLETED,
             timestamp="2026-02-08T10:00:00Z", corridor="CI-BF",
         ),
+
+        # === Account acc_009 (Chinedu Okafor, Nigeria) ===
+        Transaction(
+            id="txn_081", account_id="acc_009", type=TransactionType.P2P,
+            amount=150_000, fee=3_000, currency="NGN",
+            recipient_name="Kwame Mensah", recipient_phone="+233 24 567 8901",
+            description="Payment to Kwame in Ghana", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T10:30:00Z", corridor="NG-GH",
+        ),
+        Transaction(
+            id="txn_082", account_id="acc_009", type=TransactionType.CASH_IN,
+            amount=500_000, fee=0, currency="NGN",
+            recipient_name=None, recipient_phone=None,
+            description="Cash deposit Lagos VI agent", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-20T09:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_083", account_id="acc_009", type=TransactionType.BILL_PAYMENT,
+            amount=25_000, fee=200, currency="NGN",
+            recipient_name="DSTV", recipient_phone=None,
+            description="DSTV subscription renewal", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-18T14:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_084", account_id="acc_009", type=TransactionType.P2P,
+            amount=200_000, fee=2_000, currency="NGN",
+            recipient_name="Emeka Nwankwo", recipient_phone="+234 803 456 7890",
+            description="Rent split to Emeka", status=TransactionStatus.PENDING,
+            timestamp="2026-02-22T08:00:00Z", corridor="domestic",
+        ),
+        Transaction(
+            id="txn_085", account_id="acc_009", type=TransactionType.AIRTIME,
+            amount=5_000, fee=0, currency="NGN",
+            recipient_name=None, recipient_phone="+234 801 234 5678",
+            description="MTN airtime top-up", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-16T07:30:00Z", corridor=None,
+        ),
+
+        # === Account acc_010 (Amina Bello, Nigeria, Business) ===
+        Transaction(
+            id="txn_086", account_id="acc_010", type=TransactionType.P2P,
+            amount=2_500_000, fee=25_000, currency="NGN",
+            recipient_name="Lagos Fabrics Ltd", recipient_phone="+234 802 999 0000",
+            description="Supplier payment - fabrics", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T09:00:00Z", corridor="domestic",
+        ),
+        Transaction(
+            id="txn_087", account_id="acc_010", type=TransactionType.CASH_IN,
+            amount=5_000_000, fee=0, currency="NGN",
+            recipient_name=None, recipient_phone=None,
+            description="Weekly business deposit", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-20T16:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_088", account_id="acc_010", type=TransactionType.P2P,
+            amount=800_000, fee=16_000, currency="NGN",
+            recipient_name="Amadou Diallo", recipient_phone="+221 77 123 4567",
+            description="Cross-border supplier in Senegal", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-18T11:30:00Z", corridor="NG-SN",
+        ),
+        Transaction(
+            id="txn_089", account_id="acc_010", type=TransactionType.CASH_OUT,
+            amount=1_000_000, fee=10_000, currency="NGN",
+            recipient_name=None, recipient_phone=None,
+            description="Cash withdrawal for salaries", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-15T08:00:00Z", corridor=None,
+        ),
+
+        # === Account acc_011 (Kwame Mensah, Ghana) ===
+        Transaction(
+            id="txn_090", account_id="acc_011", type=TransactionType.P2P,
+            amount=500, fee=10, currency="GHS",
+            recipient_name="Chinedu Okafor", recipient_phone="+234 801 234 5678",
+            description="Return payment to Chinedu", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T14:00:00Z", corridor="GH-NG",
+        ),
+        Transaction(
+            id="txn_091", account_id="acc_011", type=TransactionType.CASH_IN,
+            amount=2_000, fee=0, currency="GHS",
+            recipient_name=None, recipient_phone=None,
+            description="Cash deposit Osu agent", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-19T10:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_092", account_id="acc_011", type=TransactionType.BILL_PAYMENT,
+            amount=150, fee=5, currency="GHS",
+            recipient_name="ECG Power", recipient_phone=None,
+            description="Electricity bill Accra", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-17T09:30:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_093", account_id="acc_011", type=TransactionType.AIRTIME,
+            amount=20, fee=0, currency="GHS",
+            recipient_name=None, recipient_phone="+233 20 456 7890",
+            description="MTN Ghana top-up", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-15T06:45:00Z", corridor=None,
+        ),
+
+        # === Account acc_012 (Wanjiku Kamau, Kenya) ===
+        Transaction(
+            id="txn_094", account_id="acc_012", type=TransactionType.P2P,
+            amount=10_000, fee=150, currency="KES",
+            recipient_name="Joseph Mwangi", recipient_phone="+255 712 345 678",
+            description="Transfer to Joseph in Tanzania", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T11:00:00Z", corridor="KE-TZ",
+        ),
+        Transaction(
+            id="txn_095", account_id="acc_012", type=TransactionType.CASH_IN,
+            amount=50_000, fee=0, currency="KES",
+            recipient_name=None, recipient_phone=None,
+            description="M-Pesa deposit Westlands", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-20T08:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_096", account_id="acc_012", type=TransactionType.BILL_PAYMENT,
+            amount=3_500, fee=50, currency="KES",
+            recipient_name="Kenya Power", recipient_phone=None,
+            description="KPLC electricity token", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-18T07:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_097", account_id="acc_012", type=TransactionType.P2P,
+            amount=25_000, fee=250, currency="KES",
+            recipient_name="Grace Otieno", recipient_phone="+254 722 890 123",
+            description="Rent to Grace", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-16T15:00:00Z", corridor="domestic",
+        ),
+        Transaction(
+            id="txn_098", account_id="acc_012", type=TransactionType.CASH_OUT,
+            amount=15_000, fee=150, currency="KES",
+            recipient_name=None, recipient_phone=None,
+            description="ATM withdrawal Nairobi CBD", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-13T12:00:00Z", corridor=None,
+        ),
+
+        # === Account acc_013 (Joseph Mwangi, Tanzania) ===
+        Transaction(
+            id="txn_099", account_id="acc_013", type=TransactionType.P2P,
+            amount=50_000, fee=750, currency="TZS",
+            recipient_name="Wanjiku Kamau", recipient_phone="+254 722 111 222",
+            description="Repayment to Wanjiku in Kenya", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T13:00:00Z", corridor="TZ-KE",
+        ),
+        Transaction(
+            id="txn_100", account_id="acc_013", type=TransactionType.CASH_IN,
+            amount=200_000, fee=0, currency="TZS",
+            recipient_name=None, recipient_phone=None,
+            description="Cash deposit Kariakoo agent", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-19T09:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_101", account_id="acc_013", type=TransactionType.AIRTIME,
+            amount=5_000, fee=0, currency="TZS",
+            recipient_name=None, recipient_phone="+255 712 345 678",
+            description="Vodacom top-up", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-17T06:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_102", account_id="acc_013", type=TransactionType.BILL_PAYMENT,
+            amount=30_000, fee=500, currency="TZS",
+            recipient_name="TANESCO", recipient_phone=None,
+            description="Electricity bill Dar", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-14T10:00:00Z", corridor=None,
+        ),
+
+        # === Account acc_014 (Thabo Molefe, South Africa) ===
+        Transaction(
+            id="txn_103", account_id="acc_014", type=TransactionType.P2P,
+            amount=2_500, fee=62, currency="ZAR",
+            recipient_name="Chinedu Okafor", recipient_phone="+234 801 234 5678",
+            description="Payment to Chinedu in Nigeria", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T15:00:00Z", corridor="ZA-NG",
+        ),
+        Transaction(
+            id="txn_104", account_id="acc_014", type=TransactionType.CASH_IN,
+            amount=10_000, fee=0, currency="ZAR",
+            recipient_name=None, recipient_phone=None,
+            description="FNB deposit Sandton", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-20T10:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_105", account_id="acc_014", type=TransactionType.P2P,
+            amount=1_500, fee=15, currency="ZAR",
+            recipient_name="Sipho Dlamini", recipient_phone="+27 82 345 6789",
+            description="Monthly rent split", status=TransactionStatus.PENDING,
+            timestamp="2026-02-22T09:00:00Z", corridor="domestic",
+        ),
+        Transaction(
+            id="txn_106", account_id="acc_014", type=TransactionType.BILL_PAYMENT,
+            amount=800, fee=10, currency="ZAR",
+            recipient_name="Eskom", recipient_phone=None,
+            description="Prepaid electricity", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-17T08:00:00Z", corridor=None,
+        ),
+
+        # === Account acc_015 (Youssef El Amrani, Morocco) ===
+        Transaction(
+            id="txn_107", account_id="acc_015", type=TransactionType.P2P,
+            amount=5_000, fee=125, currency="MAD",
+            recipient_name="Ahmed Hassan", recipient_phone="+20 100 234 5678",
+            description="Transfer to Ahmed in Egypt", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T12:00:00Z", corridor="MA-EG",
+        ),
+        Transaction(
+            id="txn_108", account_id="acc_015", type=TransactionType.CASH_IN,
+            amount=15_000, fee=0, currency="MAD",
+            recipient_name=None, recipient_phone=None,
+            description="Depot agent Casa Maarif", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-19T11:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_109", account_id="acc_015", type=TransactionType.BILL_PAYMENT,
+            amount=1_200, fee=20, currency="MAD",
+            recipient_name="Maroc Telecom", recipient_phone=None,
+            description="Facture internet", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-16T09:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_110", account_id="acc_015", type=TransactionType.CASH_OUT,
+            amount=3_000, fee=30, currency="MAD",
+            recipient_name=None, recipient_phone=None,
+            description="Retrait DAB Casablanca", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-13T14:00:00Z", corridor=None,
+        ),
+
+        # === Account acc_016 (Oluwaseun Adeyemi, United Kingdom) ===
+        Transaction(
+            id="txn_111", account_id="acc_016", type=TransactionType.P2P,
+            amount=200, fee=5, currency="GBP",
+            recipient_name="Chinedu Okafor", recipient_phone="+234 801 234 5678",
+            description="Monthly remittance to Nigeria", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T18:00:00Z", corridor="GB-NG",
+        ),
+        Transaction(
+            id="txn_112", account_id="acc_016", type=TransactionType.P2P,
+            amount=150, fee=3, currency="GBP",
+            recipient_name="Kwame Mensah", recipient_phone="+233 24 567 8901",
+            description="Gift to Kwame in Ghana", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-19T20:00:00Z", corridor="GB-GH",
+        ),
+        Transaction(
+            id="txn_113", account_id="acc_016", type=TransactionType.CASH_IN,
+            amount=1_000, fee=0, currency="GBP",
+            recipient_name=None, recipient_phone=None,
+            description="Bank transfer top-up", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-18T08:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_114", account_id="acc_016", type=TransactionType.P2P,
+            amount=500, fee=12, currency="GBP",
+            recipient_name="Thabo Molefe", recipient_phone="+27 82 111 2222",
+            description="Business payment to SA", status=TransactionStatus.FAILED,
+            timestamp="2026-02-15T17:00:00Z", corridor="GB-ZA",
+        ),
+
+        # === Account acc_017 (Fatima Diop, United States) ===
+        Transaction(
+            id="txn_115", account_id="acc_017", type=TransactionType.P2P,
+            amount=300, fee=7, currency="USD",
+            recipient_name="Amadou Diallo", recipient_phone="+221 77 123 4567",
+            description="Family support to Senegal", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-21T22:00:00Z", corridor="US-SN",
+        ),
+        Transaction(
+            id="txn_116", account_id="acc_017", type=TransactionType.P2P,
+            amount=500, fee=12, currency="USD",
+            recipient_name="Wanjiku Kamau", recipient_phone="+254 722 111 222",
+            description="Remittance to Kenya", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-19T21:00:00Z", corridor="US-KE",
+        ),
+        Transaction(
+            id="txn_117", account_id="acc_017", type=TransactionType.CASH_IN,
+            amount=2_000, fee=0, currency="USD",
+            recipient_name=None, recipient_phone=None,
+            description="ACH bank transfer", status=TransactionStatus.COMPLETED,
+            timestamp="2026-02-17T10:00:00Z", corridor=None,
+        ),
+        Transaction(
+            id="txn_118", account_id="acc_017", type=TransactionType.P2P,
+            amount=200, fee=5, currency="USD",
+            recipient_name="Chinedu Okafor", recipient_phone="+234 801 234 5678",
+            description="Payment to Chinedu in Nigeria", status=TransactionStatus.PENDING,
+            timestamp="2026-02-22T14:00:00Z", corridor="US-NG",
+        ),
     ]
 
 

@@ -213,7 +213,7 @@ class TestAccounts:
 
 class TestTransactions:
     def test_transaction_count(self) -> None:
-        assert len(TRANSACTIONS) >= 70
+        assert len(TRANSACTIONS) >= 110
 
     def test_all_transactions_reference_valid_accounts(self) -> None:
         for txn in TRANSACTIONS:
@@ -222,12 +222,13 @@ class TestTransactions:
             )
 
     def test_all_transactions_have_valid_fields(self) -> None:
+        valid_currencies = {"XOF", "NGN", "GHS", "KES", "TZS", "ZAR", "MAD", "EGP", "GBP", "USD"}
         for txn in TRANSACTIONS:
             assert txn.id.startswith("txn_")
             assert isinstance(txn.type, TransactionType)
             assert txn.amount > 0
             assert txn.fee >= 0
-            assert txn.currency == "XOF"
+            assert txn.currency in valid_currencies, f"{txn.id} has unknown currency {txn.currency}"
             assert isinstance(txn.status, TransactionStatus)
             assert len(txn.timestamp) > 0
             assert len(txn.description) > 0
@@ -269,6 +270,33 @@ class TestTransactions:
         assert TransactionStatus.COMPLETED in statuses
         assert TransactionStatus.PENDING in statuses
         assert TransactionStatus.FAILED in statuses
+
+    def test_new_account_transactions_exist(self) -> None:
+        """New pan-African accounts should have transactions."""
+        for acc_id in ["acc_009", "acc_010", "acc_011", "acc_012",
+                       "acc_013", "acc_014", "acc_015", "acc_016", "acc_017"]:
+            txns = get_transactions_for_account(acc_id)
+            assert len(txns) >= 3, f"{acc_id} should have at least 3 transactions"
+
+    def test_multi_currency_transactions(self) -> None:
+        """Transactions should exist in multiple currencies."""
+        currencies = {t.currency for t in TRANSACTIONS}
+        assert "NGN" in currencies
+        assert "GHS" in currencies
+        assert "KES" in currencies
+        assert "TZS" in currencies
+        assert "ZAR" in currencies
+        assert "MAD" in currencies
+        assert "GBP" in currencies
+        assert "USD" in currencies
+
+    def test_cross_border_corridors_exist(self) -> None:
+        """New transactions should include cross-border corridors."""
+        corridors = {t.corridor for t in TRANSACTIONS if t.corridor}
+        assert "NG-GH" in corridors
+        assert "KE-TZ" in corridors
+        assert "GB-NG" in corridors
+        assert "US-KE" in corridors
 
     def test_transaction_types_diverse(self) -> None:
         types = {t.type for t in TRANSACTIONS}
@@ -468,7 +496,7 @@ class TestFees:
 
 class TestAgentLocations:
     def test_agent_count(self) -> None:
-        assert len(AGENT_LOCATIONS) >= 15
+        assert len(AGENT_LOCATIONS) >= 35
 
     def test_find_agents_dakar(self) -> None:
         agents = find_agents("Dakar")
@@ -494,6 +522,38 @@ class TestAgentLocations:
         agents_lower = find_agents("dakar")
         agents_upper = find_agents("DAKAR")
         assert len(agents_lower) == len(agents_upper)
+
+    def test_find_agents_lagos(self) -> None:
+        agents = find_agents("Lagos")
+        assert len(agents) >= 3
+
+    def test_find_agents_nairobi(self) -> None:
+        agents = find_agents("Nairobi")
+        assert len(agents) >= 3
+
+    def test_find_agents_accra(self) -> None:
+        agents = find_agents("Accra")
+        assert len(agents) >= 2
+
+    def test_find_agents_johannesburg(self) -> None:
+        agents = find_agents("Johannesburg")
+        assert len(agents) >= 2
+
+    def test_find_agents_casablanca(self) -> None:
+        agents = find_agents("Casablanca")
+        assert len(agents) >= 2
+
+    def test_find_agents_cairo(self) -> None:
+        agents = find_agents("Cairo")
+        assert len(agents) >= 2
+
+    def test_find_agents_london(self) -> None:
+        agents = find_agents("London")
+        assert len(agents) >= 2
+
+    def test_find_agents_dar(self) -> None:
+        agents = find_agents("Dar es Salaam")
+        assert len(agents) >= 2
 
     def test_find_agents_no_results(self) -> None:
         agents = find_agents("Antarctica")
