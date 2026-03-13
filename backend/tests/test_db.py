@@ -235,7 +235,7 @@ class TestPostgresSessionStore:
         with patch("src.db.session_store.get_pool", return_value=mock_pool):
             session_id = await store.create_session("acc_001")
 
-        assert len(session_id) == 16
+        assert len(session_id) == 32
         mock_pool.execute.assert_awaited_once()
         call_args = mock_pool.execute.call_args
         assert "INSERT INTO sessions" in call_args[0][0]
@@ -401,13 +401,13 @@ class TestPostgresSessionStore:
         assert removed == 3
 
     @pytest.mark.asyncio
-    async def test_active_session_count(self) -> None:
+    async def test_get_active_session_count(self) -> None:
         store = PostgresSessionStore(ttl_minutes=30)
         mock_pool = self._mock_pool()
         mock_pool.fetchval.return_value = 7
 
         with patch("src.db.session_store.get_pool", return_value=mock_pool):
-            count = await store.active_session_count
+            count = await store.get_active_session_count()
 
         assert count == 7
 

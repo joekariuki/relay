@@ -35,7 +35,7 @@ class PostgresSessionStore:
     async def create_session(self, account_id: str) -> str:
         """Create a new session and return its ID."""
         pool = await self._get_pool()
-        session_id = uuid.uuid4().hex[:16]
+        session_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc)
 
         await pool.execute(
@@ -151,8 +151,7 @@ class PostgresSessionStore:
             logger.info("Cleaned up %d expired sessions", removed)
         return removed
 
-    @property
-    async def active_session_count(self) -> int:
+    async def get_active_session_count(self) -> int:
         """Count non-expired sessions."""
         pool = await self._get_pool()
         count = await pool.fetchval(
