@@ -185,10 +185,13 @@ async def calculate_fees(
         destination_country: Destination - 'domestic' for local, or country name.
         currency: Currency code (default 'XOF').
     """
+    # Look up the sender's country for corridor resolution
+    account = get_account(ctx.deps.account_id)
     record = execute_tool("calculate_fees", {
         "amount": amount,
         "currency": currency,
         "destination_country": destination_country,
+        "source_country": account.country if account else "Senegal",
     })
     ctx.deps.tool_records.append(record)
     return record.result

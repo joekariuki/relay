@@ -360,7 +360,8 @@ class TestFees:
     def test_fee_minimum_applied(self) -> None:
         result = calculate_fee(1_000, "XOF", "domestic")
         assert result is not None
-        assert result.fee >= 100  # Minimum domestic fee
+        # Minimum fee for small tier: 0.15 USD * 605 XOF/USD = 90 XOF
+        assert result.fee >= 90
 
     def test_fee_scales_with_amount(self) -> None:
         small = calculate_fee(10_000, "XOF", "domestic")
@@ -368,6 +369,98 @@ class TestFees:
         assert small is not None
         assert large is not None
         assert large.fee > small.fee
+
+    # --- Cross-currency corridor tests ---
+
+    def test_corridor_classification_waemu(self) -> None:
+        """WAEMU intra-zone: SN→ML should be intra_waemu."""
+        result = calculate_fee(50_000, "XOF", "Mali", source_country="SN")
+        assert result is not None
+        assert result.corridor == "SN-ML"
+        assert result.fee_percent == 1.5  # intra_waemu base rate
+
+    def test_corridor_classification_east_africa(self) -> None:
+        """East Africa: KE→TZ should be east_africa."""
+        result = calculate_fee(15_000, "KES", "Tanzania", source_country="KE")
+        assert result is not None
+        assert result.corridor == "KE-TZ"
+        assert result.fee_percent == 1.5  # east_africa base rate
+
+    def test_corridor_classification_west_africa_cross(self) -> None:
+        """West Africa cross-zone: NG→GH should be west_africa_cross."""
+        result = calculate_fee(150_000, "NGN", "Ghana", source_country="NG")
+        assert result is not None
+        assert result.corridor == "NG-GH"
+        assert result.fee_percent == 2.0  # west_africa_cross base rate
+
+    def test_corridor_high_volume_international(self) -> None:
+        """High-volume diaspora: GB→NG should be international_high."""
+        result = calculate_fee(100, "GBP", "Nigeria", source_country="GB")
+        assert result is not None
+        assert result.corridor == "GB-NG"
+        assert result.fee_percent == 2.5  # international_high base rate
+
+    def test_corridor_low_volume_international(self) -> None:
+        """Low-volume international: US→TZ should be international_low."""
+        result = calculate_fee(500, "USD", "Tanzania", source_country="US")
+        assert result is not None
+        assert result.corridor == "US-TZ"
+        assert result.fee_percent == 3.0  # international_low base rate
+
+    def test_corridor_cross_region(self) -> None:
+        """Cross-region Africa: NG→KE should be cross_region."""
+        result = calculate_fee(150_000, "NGN", "Kenya", source_country="NG")
+        assert result is not None
+        assert result.corridor == "NG-KE"
+        assert result.fee_percent == 2.5  # cross_region base rate
+
+    def test_domestic_ngn(self) -> None:
+        """Domestic transfer in NGN."""
+        result = calculate_fee(50_000, "NGN", "domestic", source_country="NG")
+        assert result is not None
+        assert result.corridor == "domestic"
+        assert result.currency == "NGN"
+
+    def test_usd_normalization_same_tier(self) -> None:
+        """Equivalent amounts in different currencies should hit the same tier."""
+        # ~$50 in XOF and USD should both be in the small tier (0-80 USD)
+        xof_result = calculate_fee(30_250, "XOF", "domestic", source_country="SN")
+        usd_result = calculate_fee(50, "USD", "domestic", source_country="US")
+        assert xof_result is not None
+        assert usd_result is not None
+        # Both should have the same effective rate (same tier, same corridor type)
+        assert xof_result.fee_percent == usd_result.fee_percent
+
+    def test_amount_exceeding_all_tiers(self) -> None:
+        """Amount exceeding max tier returns None."""
+        result = calculate_fee(100_000, "USD", "domestic", source_country="US")
+        assert result is None
+
+    def test_zero_amount_returns_none(self) -> None:
+        result = calculate_fee(0, "XOF", "domestic")
+        assert result is None
+
+    def test_negative_amount_returns_none(self) -> None:
+        result = calculate_fee(-5000, "XOF", "domestic")
+        assert result is None
+
+    def test_unknown_currency_returns_none(self) -> None:
+        result = calculate_fee(1000, "ZZZ", "domestic")
+        assert result is None
+
+    def test_corridor_code_passthrough(self) -> None:
+        """Direct corridor code like 'SN-ML' should work."""
+        result = calculate_fee(50_000, "XOF", "SN-ML", source_country="SN")
+        assert result is not None
+        assert result.corridor == "SN-ML"
+
+    def test_large_tier_rate_multiplier(self) -> None:
+        """Large tier ($800-$3300) should apply 0.8x rate multiplier."""
+        # 605,000 XOF ≈ $1000 → large tier
+        result = calculate_fee(605_000, "XOF", "domestic", source_country="SN")
+        assert result is not None
+        # domestic base rate 1.0% × 0.8 multiplier = 0.8%
+        assert result.fee_percent == pytest.approx(0.8, abs=0.01)
 
 
 # === Agent Location Tests ===

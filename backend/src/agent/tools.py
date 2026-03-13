@@ -138,8 +138,13 @@ def handle_calculate_fees(args: dict[str, Any]) -> dict[str, Any]:
 
     currency = str(args.get("currency", "XOF"))
     destination = str(args.get("destination_country", "domestic"))
+    source_country = str(args.get("source_country", "Senegal"))
 
-    result = calculate_fee(amount, currency, destination)
+    # Resolve source country name to 2-letter code
+    from src.knowledge.fees import _COUNTRY_CODES
+    source_code = _COUNTRY_CODES.get(source_country.lower().strip(), "SN")
+
+    result = calculate_fee(amount, currency, destination, source_country=source_code)
     if result is None:
         return {
             "error": f"No fee rule found for {_format_amount(amount, currency)} to {destination}. "
