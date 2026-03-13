@@ -166,3 +166,89 @@ The original direct-SDK approach was the right call for the initial build — it
 | Language detection | `client.messages.create()` with `client` param | `model_request()` with `model` param |
 | Config model strings | `"claude-sonnet-4-5-20250929"` | `"anthropic:claude-sonnet-4-5-20250929"` |
 | Direct `anthropic` dep | `anthropic>=0.40.0` in pyproject.toml | Transitive via `pydantic-ai-slim[anthropic]` |
+
+---
+
+## 7. Multi-Currency: Currency-Agnostic Fields + Static FX Rates
+
+**Decision**: Rename all CFA-specific fields (`balance_cfa`, `amount_cfa`, `fee_cfa`) to currency-agnostic names (`balance`, `amount`, `fee`) with a separate `currency` field, and use static exchange rates rather than a live FX API.
+
+**Context**: The original data layer assumed all values were in CFA Francs (XOF). Expanding to 10 currencies required a field rename across the entire codebase (models, accounts, transactions, fees, tools, prompts, tests) plus FX conversion logic.
+
+**Reasoning**:
+
+- **Static rates are sufficient for a demo**: Live FX APIs add infrastructure (API keys, rate limiting, caching, staleness handling) for no additional signal. Static rates in a `DEMO_EXCHANGE_RATES` dict are deterministic, testable, and always available.
+- **USD normalization for fee tiers**: Fee tiers are defined in USD-equivalent amounts. All currencies are converted to USD for tier matching, then fees are expressed in the source currency. This avoids maintaining separate tier definitions per currency.
+- **Currency-aware formatting**: A `format_currency()` helper handles symbol position, decimal places, and thousands separators per currency (e.g., `£1,200.00` vs `150,000 NGN` vs `45,000 KES`).
+
+**Trade-off accepted**: The field rename touched 12+ files in a single refactor commit. This was done as a standalone pre-phase commit before adding new data, keeping the diff reviewable.
+
+---
+
+## 8. RAG: ChromaDB In-Memory vs. Hosted Vector DB
+
+**Decision**: Use ChromaDB in-memory for policy document retrieval with OpenAI `text-embedding-3-small` for embeddings, with a fallback chain to keyword search.
+
+**Context**: The `get_policy()` tool originally did exact topic matching against a dict. RAG replaces this with semantic search over embedded policy documents.
+
+**Reasoning**:
+
+- **Zero infrastructure**: ChromaDB in-memory requires no external service. Embeddings are generated at startup from the policy documents and stored in a module-level collection. No persistence needed — the corpus is small (~15 documents) and rebuilds in seconds.
+- **OpenAI `text-embedding-3-small`**: Better multilingual support than alternatives (handles French and Swahili policy queries), and the OpenAI API key is already required for voice features.
+- **Fallback chain**: If the embedding API fails or ChromaDB errors, the tool falls back to the original keyword-based `get_policy()` / `search_policies()`. The user always gets an answer.
+- **Relevance scoring**: Vector search returns ranked results with similarity scores, letting the agent cite the most relevant policy rather than requiring an exact topic match.
+
+**Trade-off accepted**: Embeddings are rebuilt on every server restart. For ~15 documents this takes <2 seconds. A persistent vector store (Pinecone, Weaviate) would be needed at scale.
+
+---
+
+## 9. Multi-Agent Routing: Haiku Classifier + Tool Subsets
+
+**Decision**: Use a lightweight Haiku-based intent classifier to route queries to specialist agents (support, fraud, escalation), each with a subset of the available tools.
+
+**Context**: The original system had a single support agent with all 8 tools. Multi-agent routing adds an orchestrator that classifies intent before dispatching to a specialist.
+
+**Reasoning**:
+
+- **Haiku for classification speed**: Intent classification doesn't need Sonnet's reasoning depth. Haiku classifies in ~200-400ms, keeping the added latency before first token minimal.
+- **Structured output**: The classifier returns a pydantic model (`AgentType` enum), not free text. This eliminates parsing ambiguity.
+- **Tool subsetting**: Each specialist gets only the tools relevant to its domain. The fraud agent gets `lookup_transaction`, `get_transactions`, `get_policy`, and `create_support_ticket` — it can investigate and escalate but can't check balances or calculate fees. This constrains each agent's behavior without relying solely on system prompts.
+- **Slot into existing pipeline**: The orchestrator replaces the single `agent.run()` call in `core.py`. Guardrails, language detection, and streaming all stay in one place — no duplication.
+- **Default fallback**: Any classification failure (timeout, malformed output, unknown intent) routes to the support agent. The system never fails to respond.
+
+**Trade-off accepted**: Adds one LLM call (~300ms) before the specialist agent runs. For a demo this is acceptable. At scale, a local classifier (fasttext) could replace Haiku for near-zero latency.
+
+---
+
+## 10. PostgreSQL Persistence: Feature-Flagged with In-Memory Fallback
+
+**Decision**: Add optional PostgreSQL session persistence via asyncpg, controlled by `USE_POSTGRES` and `DATABASE_URL` environment variables, with the in-memory store as the default.
+
+**Context**: The in-memory session store works well for demos but doesn't persist across server restarts. PostgreSQL adds production-grade persistence while keeping the zero-infrastructure default.
+
+**Reasoning**:
+
+- **asyncpg over SQLAlchemy/ORM**: asyncpg is a pure async PostgreSQL driver with excellent performance. Raw SQL with parameterized queries keeps the abstraction minimal and the queries visible. No ORM overhead for a single-table schema.
+- **Same interface**: `PostgresSessionStore` implements the exact same methods as the in-memory `SessionStore`. The server selects which store to use based on the feature flag at startup. No other code needs to change.
+- **Atomic operations**: `get_messages()` uses `UPDATE...SET last_accessed = now() WHERE id = $1 AND last_accessed > now() - interval RETURNING messages` — a single atomic query that touches the session, checks expiry, and returns messages. This prevents TOCTOU races that the original separate-SELECT-then-UPDATE pattern would have.
+- **Auto-migration**: Raw SQL migration files in `src/db/migrations/` are applied on pool initialization. `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` make migrations idempotent.
+- **Feature-flagged**: `USE_POSTGRES=false` (default) means the project runs with zero database setup, preserving the quick-start experience. Setting it to `true` enables persistence for production deployments.
+
+**Trade-off accepted**: No migration tool (Alembic). For a single-table schema with idempotent DDL, raw SQL files are simpler. A migration framework would be needed if the schema grew.
+
+---
+
+## 11. CI Eval Pipeline: 20 Critical Cases per PR
+
+**Decision**: Run a curated subset of 20 critical eval cases on every PR via GitHub Actions, with threshold gates for groundedness (≥85%), hallucination-free (≥90%), and compliance (100%).
+
+**Context**: The full eval suite (155+ cases) is too expensive and slow for CI (~$2-4, several minutes). A critical subset provides fast, cheap quality gates.
+
+**Reasoning**:
+
+- **Curated, not random**: The 20 cases are hand-picked to cover the highest-risk scenarios: balance accuracy, fee calculations, ID masking, injection defense, cross-currency queries. They're defined in `ci_subset.py` as a list of case IDs.
+- **Threshold gates**: Groundedness ≥85% catches regressions where the agent fabricates data. Hallucination-free ≥90% catches new hallucination patterns. Compliance = 100% is non-negotiable (ID masking must never break).
+- **PR comment**: The workflow posts eval results as a PR comment, making failures visible without digging into logs.
+- **Monkey-patching for case filtering**: The CI runner temporarily replaces `harness_mod.get_test_cases` to return only the critical subset, then restores the original. This reuses the existing harness without adding a filtering parameter to its API.
+
+**Trade-off accepted**: 20 cases is a small sample. Edge cases in the remaining 135+ cases could regress without detection. The full suite should run nightly or on release branches.
