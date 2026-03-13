@@ -122,20 +122,21 @@ class TestNormalizeToUsd:
 
 class TestAccounts:
     def test_account_count(self) -> None:
-        assert len(ACCOUNTS) == 8
+        assert len(ACCOUNTS) == 17
 
     def test_all_accounts_have_unique_ids(self) -> None:
         ids = [a.id for a in ACCOUNTS.values()]
         assert len(ids) == len(set(ids))
 
     def test_all_accounts_have_valid_fields(self) -> None:
+        valid_currencies = {"XOF", "NGN", "GHS", "KES", "TZS", "ZAR", "MAD", "EGP", "GBP", "USD"}
         for acc in ACCOUNTS.values():
             assert isinstance(acc, Account)
             assert acc.id.startswith("acc_")
             assert len(acc.name) > 0
             assert acc.phone.startswith("+")
             assert acc.balance >= 0
-            assert acc.currency == "XOF"
+            assert acc.currency in valid_currencies, f"{acc.id} has unknown currency {acc.currency}"
             assert acc.account_type in ("personal", "business")
             assert isinstance(acc.kyc_tier, KYCTier)
             assert len(acc.country) > 0
@@ -153,19 +154,52 @@ class TestAccounts:
 
     def test_get_all_accounts(self) -> None:
         all_accounts = get_all_accounts()
-        assert len(all_accounts) == 8
+        assert len(all_accounts) == 17
         assert "acc_001" in all_accounts
 
     def test_get_default_account_id(self) -> None:
         default = get_default_account_id()
         assert default in ACCOUNTS
 
-    def test_countries_covered(self) -> None:
+    def test_waemu_countries_covered(self) -> None:
         countries = {a.country for a in ACCOUNTS.values()}
         assert "Senegal" in countries
         assert "Mali" in countries
         assert "Cote d'Ivoire" in countries
         assert "Burkina Faso" in countries
+
+    def test_pan_african_countries_covered(self) -> None:
+        countries = {a.country for a in ACCOUNTS.values()}
+        assert "Nigeria" in countries
+        assert "Ghana" in countries
+        assert "Kenya" in countries
+        assert "Tanzania" in countries
+        assert "South Africa" in countries
+        assert "Morocco" in countries
+        assert "Egypt" in countries
+
+    def test_diaspora_countries_covered(self) -> None:
+        countries = {a.country for a in ACCOUNTS.values()}
+        assert "United Kingdom" in countries
+        assert "United States" in countries
+
+    def test_multi_currency_accounts(self) -> None:
+        currencies = {a.currency for a in ACCOUNTS.values()}
+        assert len(currencies) >= 8, "Should have accounts in at least 8 currencies"
+
+    def test_new_account_data_integrity(self) -> None:
+        # Spot-check a few new accounts
+        ng = get_account("acc_009")
+        assert ng is not None
+        assert ng.name == "Chinedu Okafor"
+        assert ng.currency == "NGN"
+        assert ng.country == "Nigeria"
+
+        uk = get_account("acc_016")
+        assert uk is not None
+        assert uk.name == "Oluwaseun Adeyemi"
+        assert uk.currency == "GBP"
+        assert uk.country == "United Kingdom"
 
     def test_kyc_tiers_represented(self) -> None:
         tiers = {a.kyc_tier for a in ACCOUNTS.values()}

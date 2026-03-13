@@ -6,8 +6,9 @@ from .models import Account, KYCTier
 
 
 def _build_accounts() -> dict[str, Account]:
-    """Create demo accounts with realistic West African data."""
+    """Create demo accounts across pan-African and international regions."""
     accounts = [
+        # === West Africa (WAEMU) — XOF ===
         Account(
             id="acc_001",
             name="Amadou Diallo",
@@ -95,6 +96,110 @@ def _build_accounts() -> dict[str, Account]:
             kyc_tier=KYCTier.BASIC,
             country="Cote d'Ivoire",
             created_at="2025-01-03",
+        ),
+        # === West Africa (Anglophone) ===
+        Account(
+            id="acc_009",
+            name="Chinedu Okafor",
+            phone="+234 803 123 4567",
+            balance=150_000,
+            currency="NGN",
+            account_type="personal",
+            kyc_tier=KYCTier.STANDARD,
+            country="Nigeria",
+            created_at="2024-06-10",
+        ),
+        Account(
+            id="acc_010",
+            name="Akua Mensah",
+            phone="+233 24 234 5678",
+            balance=2_500,
+            currency="GHS",
+            account_type="business",
+            kyc_tier=KYCTier.PREMIUM,
+            country="Ghana",
+            created_at="2024-02-15",
+        ),
+        # === East Africa ===
+        Account(
+            id="acc_011",
+            name="Wanjiku Muthoni",
+            phone="+254 712 345 678",
+            balance=45_000,
+            currency="KES",
+            account_type="personal",
+            kyc_tier=KYCTier.STANDARD,
+            country="Kenya",
+            created_at="2024-04-01",
+        ),
+        Account(
+            id="acc_012",
+            name="Juma Hassan",
+            phone="+255 754 456 789",
+            balance=850_000,
+            currency="TZS",
+            account_type="personal",
+            kyc_tier=KYCTier.BASIC,
+            country="Tanzania",
+            created_at="2024-09-20",
+        ),
+        # === Southern Africa ===
+        Account(
+            id="acc_013",
+            name="Thabo Molefe",
+            phone="+27 82 567 8901",
+            balance=8_500,
+            currency="ZAR",
+            account_type="personal",
+            kyc_tier=KYCTier.STANDARD,
+            country="South Africa",
+            created_at="2024-07-12",
+        ),
+        # === North Africa ===
+        Account(
+            id="acc_014",
+            name="Youssef El Amrani",
+            phone="+212 661 678 901",
+            balance=12_000,
+            currency="MAD",
+            account_type="business",
+            kyc_tier=KYCTier.PREMIUM,
+            country="Morocco",
+            created_at="2024-01-25",
+        ),
+        Account(
+            id="acc_015",
+            name="Nour Ibrahim",
+            phone="+20 100 789 0123",
+            balance=35_000,
+            currency="EGP",
+            account_type="personal",
+            kyc_tier=KYCTier.STANDARD,
+            country="Egypt",
+            created_at="2024-05-18",
+        ),
+        # === Diaspora (International) ===
+        Account(
+            id="acc_016",
+            name="Oluwaseun Adeyemi",
+            phone="+44 7911 123 456",
+            balance=1_200,
+            currency="GBP",
+            account_type="personal",
+            kyc_tier=KYCTier.PREMIUM,
+            country="United Kingdom",
+            created_at="2024-03-01",
+        ),
+        Account(
+            id="acc_017",
+            name="Amina Odhiambo",
+            phone="+1 202 555 0198",
+            balance=2_800,
+            currency="USD",
+            account_type="personal",
+            kyc_tier=KYCTier.PREMIUM,
+            country="United States",
+            created_at="2024-06-22",
         ),
     ]
     return {a.id: a for a in accounts}
