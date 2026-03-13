@@ -81,6 +81,23 @@ class EvalResponse(BaseModel):
     by_category: dict[str, dict[str, float]]
 
 
+class AccountInfo(BaseModel):
+    """A single account in the /accounts response."""
+
+    id: str
+    name: str
+    country: str
+    currency: str
+    region: str
+
+
+class AccountsResponse(BaseModel):
+    """Response body for the /accounts endpoint."""
+
+    accounts: list[AccountInfo]
+    count: int
+
+
 class HealthResponse(BaseModel):
     """Response body for the /health endpoint."""
 

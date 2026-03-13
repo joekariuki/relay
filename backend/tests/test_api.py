@@ -204,6 +204,33 @@ class TestEval:
         assert response.status_code in (422, 500)
 
 
+class TestAccounts:
+    def test_accounts_returns_200(self, client: TestClient) -> None:
+        response = client.get("/accounts")
+        assert response.status_code == 200
+
+    def test_accounts_returns_all_accounts(self, client: TestClient) -> None:
+        data = client.get("/accounts").json()
+        assert data["count"] == 17
+        assert len(data["accounts"]) == 17
+
+    def test_accounts_have_required_fields(self, client: TestClient) -> None:
+        data = client.get("/accounts").json()
+        for acc in data["accounts"]:
+            assert "id" in acc
+            assert "name" in acc
+            assert "country" in acc
+            assert "currency" in acc
+            assert "region" in acc
+
+    def test_accounts_have_regions(self, client: TestClient) -> None:
+        data = client.get("/accounts").json()
+        regions = {acc["region"] for acc in data["accounts"]}
+        assert "West Africa (WAEMU)" in regions
+        assert "East Africa" in regions
+        assert "Diaspora" in regions
+
+
 class TestCORS:
     def test_cors_allowed_origin(self, client: TestClient) -> None:
         response = client.options(

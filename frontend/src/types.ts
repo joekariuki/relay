@@ -30,6 +30,8 @@ export interface Account {
   id: string;
   name: string;
   country: string;
+  currency: string;
+  region: string;
 }
 
 export type Language = "auto" | "en" | "fr" | "sw";

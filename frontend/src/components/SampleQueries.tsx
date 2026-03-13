@@ -13,8 +13,9 @@ const SAMPLE_QUERIES: QueryGroup[] = [
     queries: [
       "What is my account balance?",
       "Show me my last 5 transactions",
-      "How much is the fee to send 50,000 FCFA to Mali?",
-      "Find the nearest agent in Dakar",
+      "How much is the fee to send money to Nigeria?",
+      "Find the nearest agent in Nairobi",
+      "What's the exchange rate from GBP to NGN?",
       "I was charged twice for a transaction",
     ],
   },
@@ -24,6 +25,7 @@ const SAMPLE_QUERIES: QueryGroup[] = [
       "Quel est mon solde?",
       "Montrez-moi mes 3 dernieres transactions",
       "Combien coute l'envoi de 100 000 FCFA en Cote d'Ivoire?",
+      "Trouvez un agent a Casablanca",
       "Quelle est la politique de remboursement?",
     ],
   },
@@ -32,6 +34,7 @@ const SAMPLE_QUERIES: QueryGroup[] = [
     queries: [
       "Salio yangu ni kiasi gani?",
       "Nionyeshe miamala yangu ya hivi karibuni",
+      "Ada ya kutuma pesa Tanzania ni kiasi gani?",
       "Nataka kupata msaada kuhusu malipo",
     ],
   },

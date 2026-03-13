@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from src.config import configure_logging, get_settings
 
 from .schemas import (
+    AccountInfo,
+    AccountsResponse,
     ChatRequest,
     ChatResponse,
     EvalRequest,
@@ -94,6 +96,43 @@ async def health() -> HealthResponse:
         version=VERSION,
         environment=settings.environment,
     )
+
+
+# Region classification for account grouping
+_REGION_MAP: dict[str, str] = {
+    "Senegal": "West Africa (WAEMU)",
+    "Mali": "West Africa (WAEMU)",
+    "Cote d'Ivoire": "West Africa (WAEMU)",
+    "Burkina Faso": "West Africa (WAEMU)",
+    "Nigeria": "West Africa",
+    "Ghana": "West Africa",
+    "Kenya": "East Africa",
+    "Tanzania": "East Africa",
+    "South Africa": "Southern Africa",
+    "Morocco": "North Africa",
+    "Egypt": "North Africa",
+    "United Kingdom": "Diaspora",
+    "United States": "Diaspora",
+}
+
+
+@app.get("/accounts", response_model=AccountsResponse)
+async def list_accounts() -> AccountsResponse:
+    """List all demo accounts grouped by region."""
+    from src.knowledge.accounts import get_all_accounts
+
+    all_accounts = get_all_accounts()
+    items = [
+        AccountInfo(
+            id=acc.id,
+            name=acc.name,
+            country=acc.country,
+            currency=acc.currency,
+            region=_REGION_MAP.get(acc.country, "Other"),
+        )
+        for acc in all_accounts.values()
+    ]
+    return AccountsResponse(accounts=items, count=len(items))
 
 
 @app.post("/chat", response_model=ChatResponse)
