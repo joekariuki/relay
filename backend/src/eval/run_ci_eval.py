@@ -88,9 +88,17 @@ async def _run_eval(run_all: bool = False, max_cases: int | None = None) -> int:
 
         logger.info("Running %d CI critical eval cases", len(ci_cases))
 
-        harness = EvalHarness(concurrency=5)
-        # Run with filtered cases by temporarily replacing the getter
-        report = await harness.run(max_cases=len(ci_cases))
+        # Temporarily replace the test case source so the harness runs
+        # only the CI-critical subset instead of the full suite
+        import src.eval.harness as harness_mod
+
+        original_getter = harness_mod.get_test_cases
+        harness_mod.get_test_cases = lambda **_kwargs: ci_cases  # type: ignore[assignment]
+        try:
+            harness = EvalHarness(concurrency=5)
+            report = await harness.run()
+        finally:
+            harness_mod.get_test_cases = original_getter
 
     # Print summary
     print(_format_summary(report))
