@@ -1,18 +1,23 @@
 # Relay
 
-A multilingual AI support agent for mobile money services, built with Claude and OpenAI. Handles customer queries in English, French, and Swahili through text and voice, with a comprehensive evaluation framework for measuring agent reliability.
+A multilingual AI support agent for mobile money services, built with Claude and OpenAI. Handles customer queries in English, French, and Swahili through text and voice, with multi-agent routing, RAG-powered policy retrieval, and a comprehensive evaluation framework for measuring agent reliability.
 
-Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo accounts, transaction histories, fee structures, policies, and agent locations across Senegal, Mali, Cote d'Ivoire, and Burkina Faso.
+Relay simulates "DuniaWallet", a fictional pan-African mobile money service, with 17 demo accounts across 12 countries, 10 currencies, transaction histories, 30+ fee corridors with FX conversion, policies, and 38+ agent locations spanning West, East, North, and Southern Africa plus UK and US diaspora corridors.
 
 ## Features
 
-- **Tool-use agent** — Claude Sonnet via Pydantic AI orchestrates 7 tools (balance checks, transactions, fees, agent lookup, policies, support tickets) through a multi-turn conversation loop
-- **Conversation memory** — Session-based history using pydantic-ai's native `message_history` with in-memory store, TTL expiry, and automatic history pruning to bound token usage
+- **Multi-agent routing** — Intent classifier (Haiku) routes queries to support, fraud, or escalation specialist agents, each with tailored tools and system prompts
+- **Tool-use agent** — Claude Sonnet via Pydantic AI orchestrates 8 tools (balance checks, transactions, fees, FX rates, agent lookup, policies, support tickets) through a multi-turn conversation loop
+- **Multi-currency support** — 10 currencies (XOF, NGN, GHS, KES, TZS, ZAR, MAD, EGP, GBP, USD) with FX conversion, rate display, and currency-aware formatting
+- **Pan-African coverage** — 12 countries, 17 demo accounts, 38+ agent locations, 30+ fee corridors including diaspora remittance (UK/US to Africa)
+- **RAG policy retrieval** — ChromaDB vector store with OpenAI embeddings for semantic policy search, with keyword fallback chain
+- **Conversation memory** — Session-based history using pydantic-ai's native `message_history` with in-memory or PostgreSQL store, TTL expiry, and automatic history pruning
 - **Streaming responses** — Server-Sent Events (SSE) via pydantic-ai's `run_stream()` deliver tokens progressively for real-time chat UX
 - **Multilingual support** — English, French, and Swahili with automatic language detection and code-switching handling (e.g. "Nataka ku-check balance yangu")
 - **Voice pipeline** — Whisper ASR for speech-to-text, language-specific TTS voices (alloy/nova/echo), full latency tracking at every stage
 - **Real-time voice mode** — WebSocket-based live voice conversation with Deepgram Nova-2 streaming ASR, built-in VAD, sentence-level OpenAI TTS streaming, and shared conversation context with text chat
-- **Evaluation framework** — 100+ curated test cases scored across 4 dimensions: groundedness, hallucination detection, compliance, and language quality
+- **Evaluation framework** — 155+ curated test cases scored across 5 dimensions (groundedness, hallucination, compliance, language quality, tool correctness) with CI eval gates via GitHub Actions
+- **PostgreSQL persistence** — Optional async session storage via asyncpg with auto-migration, feature-flagged with in-memory fallback
 - **Safety guardrails** — Prompt injection detection, PII flagging, account ID masking, and 10 explicit behavioral rules enforced via system prompt
 - **Low-literacy handling** — SMS-style queries ("bal pls", "hw mch 2 snd 50k") and abbreviated inputs
 - **Debug panel** — Collapsible UI showing tool calls, arguments, results, and latency breakdown for every response
@@ -28,12 +33,13 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 └──────────┘     └────────────┘     │ (Haiku/heur.) │     │ (max 5 rds)  │     └──────────┘
                   flags, doesn't     └───────────────┘     │              │
                   hard-block              │                │  ┌─────────┐ │
-                                          ▼                │  │ 7 Tools │ │
+                                          ▼                │  │ 8 Tools │ │
                                    ┌─────────────┐        │  └─────────┘ │
                                    │ System      │───────>│  balance     │
                                    │ Prompt      │        │  txns        │
                                    │ (EN/FR/SW)  │        │  fees        │
-                                   └─────────────┘        │  agents      │
+                                   └─────────────┘        │  FX rates    │
+                                                          │  agents      │
                                                           │  policies    │
                                                           │  tickets     │
                                                           └──────────────┘
@@ -73,10 +79,10 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 
 ```
 ┌────────────┐     ┌─────────────┐     ┌──────────────────────────────────┐     ┌────────┐
-│ 100+ Test  │────>│ Agent       │────>│ Scoring (parallel per case)      │────>│ Report │
+│ 155+ Test  │────>│ Agent       │────>│ Scoring (parallel per case)      │────>│ Report │
 │ Cases      │     │ Pipeline    │     │                                  │     │        │
 │            │     │ (semaphore  │     │  Groundedness  (LLM-as-judge)   │     │ scores │
-│ 10 cats:   │     │  concur=5)  │     │  Hallucination (LLM-as-judge)   │     │ by cat │
+│ 16 cats:   │     │  concur=5)  │     │  Hallucination (LLM-as-judge)   │     │ by cat │
 │ balance    │     └─────────────┘     │  Compliance    (rule-based)      │     │ fails  │
 │ txns       │                         │  Language      (LLM-as-judge)   │     └────────┘
 │ fees       │                         │  Tool correct. (Jaccard)        │
@@ -102,31 +108,45 @@ Relay simulates "DuniaWallet", a fictional mobile money service, with 8 demo acc
 | Backend | Python 3.11+, FastAPI, Pydantic, `mypy --strict` |
 | Frontend | React 18, TypeScript (strict), Vite, Tailwind CSS |
 | Streaming ASR | Deepgram Nova-2 (real-time WebSocket transcription) |
-| Testing | pytest (240 tests), pytest-asyncio |
+| RAG / Embeddings | ChromaDB (in-memory) + OpenAI `text-embedding-3-small` |
+| Database (optional) | PostgreSQL via asyncpg, feature-flagged |
+| CI/CD | GitHub Actions eval pipeline with threshold gates |
+| Testing | pytest (370 tests), pytest-asyncio |
 
 ## Project Structure
 
 ```
 relay/
+├── .github/
+│   └── workflows/
+│       └── eval.yml               # CI eval pipeline (20 critical cases per PR)
 ├── backend/
 │   ├── src/
 │   │   ├── config.py              # Environment config (pydantic-settings)
 │   │   ├── session.py             # In-memory session store with TTL
 │   │   ├── agent/
-│   │   │   ├── core.py            # Pydantic AI Agent with @tool decorators + orchestration
-│   │   │   ├── tools.py           # 7 tool handler implementations
+│   │   │   ├── core.py            # Pydantic AI Agent orchestration + streaming
+│   │   │   ├── orchestrator.py    # Multi-agent intent classification + routing
+│   │   │   ├── tools.py           # 8 tool handler implementations
 │   │   │   ├── prompts.py         # System prompts (EN/FR/SW, 10 rules each)
 │   │   │   ├── router.py          # Language detection (Haiku + heuristic)
 │   │   │   └── guardrails.py      # Injection & PII detection (flag, don't block)
 │   │   ├── knowledge/
-│   │   │   ├── accounts.py        # 8 demo accounts (Senegal, Mali, CI, BF)
-│   │   │   ├── transactions.py    # ~80 transactions across accounts
-│   │   │   ├── fees.py            # Fee rules by corridor
-│   │   │   ├── policies.py        # 10 policy topics (EN/FR)
-│   │   │   └── agents_data.py     # 18 cash-in/out agent locations
+│   │   │   ├── accounts.py        # 17 demo accounts (12 countries, 10 currencies)
+│   │   │   ├── transactions.py    # ~120 transactions across accounts
+│   │   │   ├── fees.py            # Fee rules for 30+ corridors with FX conversion
+│   │   │   ├── policies.py        # 12 policy topics (EN/FR)
+│   │   │   ├── agents_data.py     # 38+ agent locations across 12 countries
+│   │   │   └── rag.py             # ChromaDB embedding + semantic policy retrieval
+│   │   ├── db/
+│   │   │   ├── connection.py      # asyncpg pool management + health checks
+│   │   │   ├── session_store.py   # PostgreSQL-backed session store
+│   │   │   └── migrations/        # SQL migration scripts
 │   │   ├── eval/
 │   │   │   ├── harness.py         # Async eval runner (bounded concurrency)
-│   │   │   ├── test_cases.py      # 100+ curated test cases, 10 categories
+│   │   │   ├── test_cases.py      # 155+ curated test cases, 16 categories
+│   │   │   ├── ci_subset.py       # 20 critical CI case IDs + thresholds
+│   │   │   ├── run_ci_eval.py     # CLI runner for CI eval pipeline
 │   │   │   ├── groundedness.py    # LLM-as-judge: claims vs tool results
 │   │   │   ├── hallucination.py   # LLM-as-judge: fabricated data detection
 │   │   │   ├── compliance.py      # Rule-based: no full IDs, no financial advice
@@ -137,7 +157,7 @@ relay/
 │   │   └── api/
 │   │       ├── server.py          # FastAPI endpoints + /ws/voice WebSocket
 │   │       └── schemas.py         # Request/response/WebSocket message schemas
-│   └── tests/                     # 240 unit tests
+│   └── tests/                     # 370 unit tests
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                # Main layout + voice mode integration
@@ -154,7 +174,7 @@ relay/
 
 ```bash
 # Clone
-git clone https://github.com/your-username/relay.git
+git clone https://github.com/joekariuki/relay.git
 cd relay
 
 # Backend
@@ -185,7 +205,8 @@ Open **http://localhost:5173** — the Vite dev server proxies `/api/*` requests
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Health check with version and environment |
+| `GET` | `/health` | Health check with version, environment, and PostgreSQL status |
+| `GET` | `/accounts` | List all demo accounts grouped by region |
 | `POST` | `/chat` | Text message → agent response with tool calls and latency |
 | `POST` | `/chat/stream` | SSE streaming — tokens delivered progressively via `text_delta` events |
 | `POST` | `/voice` | Audio upload (multipart) → ASR → agent → optional TTS |
@@ -223,7 +244,7 @@ curl -X POST http://localhost:8000/eval \
   -H "Content-Type: application/json" \
   -d '{"category": "balance_inquiry", "max_cases": 10}'
 
-# Full suite (100+ cases — takes several minutes, costs ~$2-4 in API calls)
+# Full suite (155+ cases — takes several minutes, costs ~$2-4 in API calls)
 curl -X POST http://localhost:8000/eval \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -246,9 +267,10 @@ curl -X POST http://localhost:8000/eval \
 | `check_balance` | Account balance, holder name, KYC tier (account IDs masked in response) |
 | `get_transactions` | Recent transactions with type, amount, status (default 5, max 20) |
 | `lookup_transaction` | Search by transaction ID, recipient name, or keyword |
-| `calculate_fees` | Fee for amount and corridor (domestic, SN-ML, SN-CI, SN-BF) |
-| `find_agent` | Nearby cash-in/out agent locations by city or neighborhood |
-| `get_policy` | Service policies by topic, with keyword search fallback |
+| `calculate_fees` | Fee for amount and corridor (domestic per country, 30+ cross-border and international corridors) with FX rate display |
+| `get_exchange_rate` | FX rate between any two supported currencies with spread |
+| `find_agent` | Nearby cash-in/out agent locations by city or neighborhood across 12 countries |
+| `get_policy` | Service policies by topic, with RAG semantic search and keyword fallback |
 | `create_support_ticket` | Escalate to human support with category and priority |
 
 ## Conversation Memory
@@ -258,7 +280,7 @@ The agent maintains context across turns within a session. When a user asks "Wha
 **How it works:**
 
 - Each conversation is assigned a `session_id` (auto-generated on first request, returned in every response)
-- Message history is stored server-side in an in-memory session store using pydantic-ai's native `ModelMessage` format
+- Message history is stored server-side using pydantic-ai's native `ModelMessage` format (in-memory by default, or PostgreSQL when `USE_POSTGRES=true`)
 - On each request, the full conversation history is loaded and passed to `Agent.run()` / `Agent.iter()` via the `message_history` parameter
 - After the agent responds, the updated history (including the new exchange) is persisted back to the store
 - Sessions expire after 30 minutes of inactivity (configurable via `SESSION_TTL_MINUTES`)
@@ -270,6 +292,8 @@ The agent maintains context across turns within a session. When a user asks "Wha
 2. **Continue** — Pass the returned `session_id` in subsequent requests
 3. **Clear** — `DELETE /sessions/{session_id}` (frontend does this on "Clear chat" or account switch)
 4. **Expire** — Automatic cleanup after TTL
+
+**PostgreSQL persistence (optional):** Set `USE_POSTGRES=true` and `DATABASE_URL` to persist sessions to PostgreSQL via asyncpg. The PostgreSQL store implements the same interface as the in-memory store with atomic operations (UPDATE...RETURNING to prevent TOCTOU races) and auto-migration on startup. Falls back to in-memory when disabled.
 
 ## Voice Mode
 
@@ -304,10 +328,10 @@ Code-switching (e.g. "Nataka ku-check balance yangu") is detected and handled �
 ```bash
 cd backend
 
-# Unit tests (240 tests, no API keys needed)
+# Unit tests (370 tests, no API keys needed)
 uv run pytest tests/ -v
 
-# Type checking (strict mode, 29 source files)
+# Type checking (strict mode)
 uv run mypy src/ --strict
 
 # Frontend build
@@ -322,19 +346,23 @@ Key architectural choices are documented in [docs/design-decisions.md](docs/desi
 - **Pydantic AI** over LangChain/LangGraph — lightweight, Pydantic-native, slim dependency footprint, transparent tool-use loop via `usage_limits`
 - **REST API** over GraphQL — small API surface (5 endpoints), simpler for file uploads
 - **Custom eval framework** over Promptfoo — domain-specific scoring (financial hallucinations, ID masking), tighter integration with agent pipeline
-- **In-memory data** over database — zero infrastructure, deterministic tests, instant startup
+- **In-memory data** over database — zero infrastructure, deterministic tests, instant startup (PostgreSQL available as opt-in for session persistence)
+- **ChromaDB in-memory** over hosted vector DB — zero infrastructure for demo, embeddings rebuilt on startup from policy documents
+- **Multi-agent via pydantic-ai** over LangGraph — lightweight routing with Haiku classifier, each specialist gets a tool subset, no framework overhead
 
 ## What I'd Build at Scale
 
-This project is a demo. Here's what a production system handling 10M+ interactions/month would need:
+This project is a demo with several production-grade patterns already implemented. Here's what's built and what a system handling 10M+ interactions/month would additionally need:
 
-**Infrastructure:** PostgreSQL/CockroachDB for accounts and transactions, Redis for session state and rate limiting, async task queue (Celery/Temporal) for eval runs, structured observability with OpenTelemetry, Kubernetes for horizontal scaling.
+**Already built:** PostgreSQL session persistence (feature-flagged), RAG over policy documents (ChromaDB + OpenAI embeddings), multi-agent routing (support/fraud/escalation specialists), CI eval pipeline (GitHub Actions with threshold gates on every PR), multi-currency FX conversion across 30+ corridors.
 
-**Agent improvements:** Persistent conversation memory across sessions (Redis/PostgreSQL-backed instead of in-memory), A/B testing framework for prompt variants, retrieval-augmented generation (RAG) over a real policy knowledge base instead of hardcoded documents, fine-tuned language detection for low-resource languages.
+**Infrastructure at scale:** CockroachDB for distributed accounts and transactions, Redis for session state and rate limiting, async task queue (Celery/Temporal) for eval runs, structured observability with OpenTelemetry, Kubernetes for horizontal scaling.
+
+**Agent improvements:** A/B testing framework for prompt variants, fine-tuned local language detection for low-resource languages (replacing Haiku API calls), persistent vector store for RAG (replacing in-memory ChromaDB).
 
 **Voice at scale:** Multi-region Deepgram endpoints for latency optimization, fallback TTS engines for reliability, on-device wake word detection for mobile, WebRTC for peer-to-peer audio with TURN server fallback, latency budgets per pipeline stage with SLOs.
 
-**Evaluation in CI:** Nightly eval runs against the full suite with regression alerts, cost tracking per eval run, human-in-the-loop review for edge cases the automated judges can't resolve, shadow mode to compare new model versions against production before rollout.
+**Evaluation at scale:** Nightly eval runs against the full suite with drift detection and regression alerts, cost tracking per eval run, human-in-the-loop review for edge cases the automated judges can't resolve, shadow mode to compare new model versions against production before rollout.
 
 ## License
 
