@@ -21,7 +21,7 @@ from src.config import get_settings
 from src.knowledge.accounts import get_account
 from src.knowledge.models import AgentResponse, Language, ToolCallRecord
 
-from .formatting import clean_response_text
+from .formatting import clean_response_text, clean_text_chunk
 from .guardrails import check_guardrails
 from .prompts import get_system_prompt
 from .router import LanguageDetectionResult, detect_language
@@ -427,7 +427,6 @@ async def stream_agent_response(
 
         yield StreamEvent("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["analyzing"], lang)})
 
-        pending_chunks: list[str] = []
         async with support_agent.iter(
             message,
             deps=deps,
@@ -441,10 +440,11 @@ async def stream_agent_response(
             node = agent_run.next_node
             while not isinstance(node, End):
                 if support_agent.is_model_request_node(node):
-                    pending_chunks = []
                     async with node.stream(agent_run.ctx) as stream:
                         async for chunk in stream.stream_text(delta=True, debounce_by=None):
-                            pending_chunks.append(chunk)
+                            cleaned = clean_text_chunk(chunk)
+                            if cleaned:
+                                yield StreamEvent("text_delta", {"chunk": cleaned})
                 elif support_agent.is_call_tools_node(node):
                     for tc in node.model_response.tool_calls:
                         tool_msgs = _TOOL_STATUS_MESSAGES.get(tc.tool_name)
@@ -454,11 +454,6 @@ async def stream_agent_response(
 
             if stream_context is not None:
                 stream_context.all_messages = agent_run.result.all_messages()
-
-        yield StreamEvent("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["preparing"], lang)})
-        accumulated_text = clean_response_text("".join(pending_chunks))
-        if accumulated_text:
-            yield StreamEvent("text_delta", {"chunk": accumulated_text})
 
         latency["agent_processing_ms"] = (time.perf_counter() - t2) * 1000
         latency["total_ms"] = (time.perf_counter() - t0) * 1000

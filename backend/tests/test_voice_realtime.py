@@ -403,6 +403,150 @@ class TestStreamAgentResponse:
 
         assert any(e.type == "error" for e in events)
 
+    @pytest.mark.asyncio
+    async def test_yields_progressive_text_deltas(self) -> None:
+        """Verify that text chunks are yielded progressively, not batched."""
+        from pydantic_graph import End
+
+        from src.agent.core import StreamContext, StreamEvent, stream_agent_response
+
+        events: list[StreamEvent] = []
+
+        with patch("src.agent.core.check_guardrails") as mock_guard, \
+             patch("src.agent.core.detect_language", new_callable=AsyncMock) as mock_lang, \
+             patch("src.agent.core.support_agent") as mock_agent:
+
+            mock_guard.return_value = MagicMock(
+                safe=True, injection_detected=False, flags=[]
+            )
+            mock_lang.return_value = MagicMock(
+                language="en", confidence=0.9,
+                code_switching=False, secondary_language=None,
+            )
+
+            # Simulate a model request node that streams 3 text chunks
+            text_chunks = ["Your balance ", "is 245,000 ", "FCFA."]
+
+            async def fake_stream_text(delta: bool = True, debounce_by: object = None):  # noqa: ANN001, ARG001
+                for chunk in text_chunks:
+                    yield chunk
+
+            mock_stream = MagicMock()
+            mock_stream.stream_text = fake_stream_text
+
+            mock_stream_ctx = AsyncMock()
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_stream)
+            mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
+
+            # Create a model request node mock
+            mock_model_node = MagicMock()
+            mock_model_node.stream.return_value = mock_stream_ctx
+
+            end_node = End("done")
+
+            mock_result = MagicMock()
+            mock_result.output = "Your balance is 245,000 FCFA."
+            mock_result.all_messages.return_value = ["msg1", "msg2"]
+
+            # next_node returns model node first, then next() returns End
+            mock_run = AsyncMock()
+            mock_run.next_node = mock_model_node
+            mock_run.result = mock_result
+            mock_run.ctx = MagicMock()
+            mock_run.next = AsyncMock(return_value=end_node)
+
+            mock_agent.is_model_request_node.return_value = True
+            mock_agent.is_call_tools_node.return_value = False
+
+            mock_ctx_manager = AsyncMock()
+            mock_ctx_manager.__aenter__ = AsyncMock(return_value=mock_run)
+            mock_ctx_manager.__aexit__ = AsyncMock(return_value=False)
+            mock_agent.iter.return_value = mock_ctx_manager
+
+            ctx = StreamContext()
+            async for event in stream_agent_response(
+                message="What is my balance?",
+                stream_context=ctx,
+            ):
+                events.append(event)
+
+        # Should have multiple text_delta events (one per chunk)
+        text_deltas = [e for e in events if e.type == "text_delta"]
+        assert len(text_deltas) == 3, f"Expected 3 text_delta events, got {len(text_deltas)}"
+        assert text_deltas[0].data["chunk"] == "Your balance "
+        assert text_deltas[1].data["chunk"] == "is 245,000 "
+        assert text_deltas[2].data["chunk"] == "FCFA."
+
+    @pytest.mark.asyncio
+    async def test_streaming_strips_emojis_per_chunk(self) -> None:
+        """Verify that emoji characters are stripped from each streamed chunk."""
+        from pydantic_graph import End
+
+        from src.agent.core import StreamEvent, stream_agent_response
+
+        events: list[StreamEvent] = []
+
+        with patch("src.agent.core.check_guardrails") as mock_guard, \
+             patch("src.agent.core.detect_language", new_callable=AsyncMock) as mock_lang, \
+             patch("src.agent.core.support_agent") as mock_agent:
+
+            mock_guard.return_value = MagicMock(
+                safe=True, injection_detected=False, flags=[]
+            )
+            mock_lang.return_value = MagicMock(
+                language="en", confidence=0.9,
+                code_switching=False, secondary_language=None,
+            )
+
+            # Chunks with emojis that should be stripped
+            text_chunks = ["Hello! 😊 ", "Your balance ", "is ready 🎉"]
+
+            async def fake_stream_text(delta: bool = True, debounce_by: object = None):  # noqa: ANN001, ARG001
+                for chunk in text_chunks:
+                    yield chunk
+
+            mock_stream = MagicMock()
+            mock_stream.stream_text = fake_stream_text
+
+            mock_stream_ctx = AsyncMock()
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_stream)
+            mock_stream_ctx.__aexit__ = AsyncMock(return_value=False)
+
+            mock_model_node = MagicMock()
+            mock_model_node.stream.return_value = mock_stream_ctx
+
+            end_node = End("done")
+
+            mock_result = MagicMock()
+            mock_result.output = "Hello! Your balance is ready"
+            mock_result.all_messages.return_value = []
+
+            mock_run = AsyncMock()
+            mock_run.next_node = mock_model_node
+            mock_run.result = mock_result
+            mock_run.ctx = MagicMock()
+            mock_run.next = AsyncMock(return_value=end_node)
+
+            mock_agent.is_model_request_node.return_value = True
+            mock_agent.is_call_tools_node.return_value = False
+
+            mock_ctx_manager = AsyncMock()
+            mock_ctx_manager.__aenter__ = AsyncMock(return_value=mock_run)
+            mock_ctx_manager.__aexit__ = AsyncMock(return_value=False)
+            mock_agent.iter.return_value = mock_ctx_manager
+
+            async for event in stream_agent_response(message="Hi"):
+                events.append(event)
+
+        text_deltas = [e for e in events if e.type == "text_delta"]
+        assert len(text_deltas) == 3
+        # Emojis should be stripped
+        assert "😊" not in text_deltas[0].data["chunk"]
+        assert "🎉" not in text_deltas[2].data["chunk"]
+        assert text_deltas[0].data["chunk"] == "Hello!  "
+        assert text_deltas[1].data["chunk"] == "Your balance "
+        assert text_deltas[2].data["chunk"] == "is ready "
+
 
 # --- WebSocket Endpoint ---
 

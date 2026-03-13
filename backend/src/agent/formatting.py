@@ -31,6 +31,15 @@ _EMOJI_PATTERN = re.compile(
 _EXCESSIVE_NEWLINES = re.compile(r"\n{3,}")
 
 
+def clean_text_chunk(chunk: str) -> str:
+    """Clean a single streaming text chunk.
+
+    Only applies emoji removal — full-text operations (newline collapsing,
+    whitespace stripping) are not safe to apply per-chunk.
+    """
+    return _EMOJI_PATTERN.sub("", chunk)
+
+
 def clean_response_text(text: str) -> str:
     """Clean and normalize response text from Claude.
 
