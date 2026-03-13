@@ -14,7 +14,7 @@ from typing import Any
 
 from src.knowledge.accounts import get_account
 from src.knowledge.agents_data import find_agents
-from src.knowledge.fees import calculate_fee
+from src.knowledge.fees import calculate_fee, resolve_country_code
 from src.knowledge.models import ToolCallRecord, format_currency
 from src.knowledge.policies import get_policy, search_policies  # noqa: F401
 from src.knowledge.transactions import get_transactions_for_account, lookup_transaction
@@ -141,8 +141,9 @@ def handle_calculate_fees(args: dict[str, Any]) -> dict[str, Any]:
     source_country = str(args.get("source_country", "Senegal"))
 
     # Resolve source country name to 2-letter code
-    from src.knowledge.fees import _COUNTRY_CODES
-    source_code = _COUNTRY_CODES.get(source_country.lower().strip(), "SN")
+    source_code = resolve_country_code(source_country)
+    if source_code is None:
+        return {"error": f"Unknown source country: '{source_country}'"}
 
     result = calculate_fee(amount, currency, destination, source_country=source_code)
     if result is None:

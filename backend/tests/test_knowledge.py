@@ -4,7 +4,7 @@ import pytest
 
 from src.knowledge.accounts import ACCOUNTS, get_account, get_all_accounts, get_default_account_id
 from src.knowledge.agents_data import AGENT_LOCATIONS, find_agents
-from src.knowledge.fees import FEE_RULES, calculate_fee
+from src.knowledge.fees import CORRIDOR_NAMES, calculate_fee
 from src.knowledge.models import (
     Account,
     CURRENCY_FORMAT,
@@ -352,8 +352,8 @@ class TestPolicies:
 
 
 class TestFees:
-    def test_fee_rules_exist(self) -> None:
-        assert len(FEE_RULES) > 0
+    def test_corridor_names_exist(self) -> None:
+        assert len(CORRIDOR_NAMES) > 0
 
     def test_calculate_domestic_fee(self) -> None:
         result = calculate_fee(50_000, "XOF", "domestic")

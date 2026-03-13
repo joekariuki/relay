@@ -69,6 +69,12 @@ _COUNTRY_CODES: dict[str, str] = {
     "usa": "US",
 }
 
+
+def resolve_country_code(name: str) -> str | None:
+    """Resolve a country name to its 2-letter ISO code, or None if unknown."""
+    return _COUNTRY_CODES.get(name.lower().strip())
+
+
 # Reverse lookup: country code → default currency
 _COUNTRY_CURRENCY: dict[str, str] = {
     "SN": "XOF", "ML": "XOF", "CI": "XOF", "BF": "XOF",
@@ -229,6 +235,5 @@ def calculate_fee(
     return None
 
 
-# Legacy flat FEE_RULES list — kept for backward compatibility with tests that
-# reference it. New code should use calculate_fee() directly.
-FEE_RULES = list(CORRIDOR_RATES.keys())
+# List of corridor type names (e.g. "domestic", "intra_waemu", etc.)
+CORRIDOR_NAMES = list(CORRIDOR_RATES.keys())
