@@ -15,7 +15,7 @@ from typing import Any
 from src.knowledge.accounts import get_account
 from src.knowledge.agents_data import find_agents
 from src.knowledge.fees import calculate_fee
-from src.knowledge.models import ToolCallRecord
+from src.knowledge.models import ToolCallRecord, format_currency
 from src.knowledge.policies import get_policy, search_policies
 from src.knowledge.transactions import get_transactions_for_account, lookup_transaction
 
@@ -30,9 +30,9 @@ def _mask_account_id(account_id: str) -> str:
     return "****"
 
 
-def _format_amount(amount: int, currency: str = "XOF") -> str:
-    """Format an amount with thousands separator and currency code."""
-    return f"{amount:,} {currency}"
+def _format_amount(amount: int | float, currency: str = "XOF") -> str:
+    """Format an amount using locale-aware currency formatting."""
+    return format_currency(amount, currency)
 
 
 def handle_check_balance(args: dict[str, Any]) -> dict[str, Any]:

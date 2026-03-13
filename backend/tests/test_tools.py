@@ -18,7 +18,8 @@ class TestCheckBalance:
         assert result["account_id_masked"] == "****001"
         assert result["name"] == "Amadou Diallo"
         assert result["balance"] == 245_000
-        assert "XOF" in result["balance_formatted"]
+        assert "FCFA" in result["balance_formatted"]
+        assert result["currency"] == "XOF"
         assert result["kyc_tier"] == "standard"
 
     def test_invalid_account(self) -> None:

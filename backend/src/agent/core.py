@@ -129,6 +129,7 @@ def _build_system_prompt(ctx: RunContext[AgentDeps]) -> str:
         user_name=account.name if account else "Unknown",
         account_id=ctx.deps.account_id,
         user_country=account.country if account else "Unknown",
+        user_currency=account.currency if account else "XOF",
     )
 
 
