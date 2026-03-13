@@ -120,15 +120,8 @@ def _cap_message_history(messages: list[ModelMessage]) -> list[ModelMessage]:
     return messages[:1] + messages[-(max_messages - 1):]
 
 
-# Module-level agent instance — model provided at run time via agent.run(model=...)
-support_agent = Agent(
-    deps_type=AgentDeps,
-    history_processors=[_cap_message_history],
-)
-
-
-@support_agent.system_prompt
-def build_system_prompt(ctx: RunContext[AgentDeps]) -> str:
+# System prompt builder — used by the agent via @agent.system_prompt decorator below.
+def _build_system_prompt(ctx: RunContext[AgentDeps]) -> str:
     """Build the system prompt with user context and language."""
     account = get_account(ctx.deps.account_id)
     return get_system_prompt(
@@ -139,20 +132,18 @@ def build_system_prompt(ctx: RunContext[AgentDeps]) -> str:
     )
 
 
-# === Tool Definitions (registered via @agent.tool) ===
+# === Tool Definitions (plain async functions, composed via Agent(tools=[...])) ===
 
 
-@support_agent.tool
 async def check_balance(ctx: RunContext[AgentDeps]) -> dict[str, object]:
     """Check the current balance of the user's DuniaWallet account.
-    Returns balance in CFA Francs, account holder name, and KYC tier.
+    Returns balance in the account's local currency, account holder name, and KYC tier.
     The account ID is partially masked for security."""
     record = execute_tool("check_balance", {"account_id": ctx.deps.account_id})
     ctx.deps.tool_records.append(record)
     return record.result
 
 
-@support_agent.tool
 async def get_transactions(ctx: RunContext[AgentDeps], limit: int = 5) -> dict[str, object]:
     """Get recent transactions for the user's account, sorted by most recent first.
 
@@ -167,7 +158,6 @@ async def get_transactions(ctx: RunContext[AgentDeps], limit: int = 5) -> dict[s
     return record.result
 
 
-@support_agent.tool
 async def lookup_transaction(ctx: RunContext[AgentDeps], query: str) -> dict[str, object]:
     """Search for specific transactions by transaction ID, recipient name, or description.
 
@@ -182,7 +172,6 @@ async def lookup_transaction(ctx: RunContext[AgentDeps], query: str) -> dict[str
     return record.result
 
 
-@support_agent.tool
 async def calculate_fees(
     ctx: RunContext[AgentDeps],
     amount: int,
@@ -192,7 +181,7 @@ async def calculate_fees(
     """Calculate the transfer fee for a given amount and destination.
 
     Args:
-        amount: Transfer amount in CFA Francs.
+        amount: Transfer amount in the sender's currency.
         destination_country: Destination - 'domestic' for local, or country name.
         currency: Currency code (default 'XOF').
     """
@@ -205,7 +194,6 @@ async def calculate_fees(
     return record.result
 
 
-@support_agent.tool
 async def find_agent(ctx: RunContext[AgentDeps], location: str) -> dict[str, object]:
     """Find DuniaWallet cash-in/cash-out agents near a given location.
 
@@ -217,7 +205,6 @@ async def find_agent(ctx: RunContext[AgentDeps], location: str) -> dict[str, obj
     return record.result
 
 
-@support_agent.tool
 async def get_policy(ctx: RunContext[AgentDeps], topic: str) -> dict[str, object]:
     """Retrieve a DuniaWallet service policy by topic.
 
@@ -229,7 +216,6 @@ async def get_policy(ctx: RunContext[AgentDeps], topic: str) -> dict[str, object
     return record.result
 
 
-@support_agent.tool
 async def create_support_ticket(
     ctx: RunContext[AgentDeps],
     category: str,
@@ -251,6 +237,27 @@ async def create_support_ticket(
     })
     ctx.deps.tool_records.append(record)
     return record.result
+
+
+# All available tools as plain functions — composable across multiple agents.
+# Each tool takes RunContext[AgentDeps] as first param for dependency injection.
+SUPPORT_TOOLS = [
+    check_balance,
+    get_transactions,
+    lookup_transaction,
+    calculate_fees,
+    find_agent,
+    get_policy,
+    create_support_ticket,
+]
+
+# Module-level agent instance — model provided at run time via agent.run(model=...)
+support_agent = Agent(
+    deps_type=AgentDeps,
+    tools=SUPPORT_TOOLS,
+    history_processors=[_cap_message_history],
+)
+support_agent.system_prompt(_build_system_prompt)
 
 
 def _language_code_to_enum(code: str) -> Language:
