@@ -51,28 +51,39 @@ class PostgresSessionStore:
         return session_id
 
     async def get_messages(self, session_id: str) -> list[ModelMessage] | None:
-        """Return message history for a session, or None if expired/missing."""
+        """Return message history for a session, or None if expired/missing.
+
+        Uses atomic UPDATE...RETURNING to avoid TOCTOU race between
+        expiry check, delete, and touch operations.
+        """
         pool = await self._get_pool()
+
+        # Atomic: touch last_accessed and return messages only if not expired
         row = await pool.fetchrow(
-            "SELECT messages, last_accessed FROM sessions WHERE id = $1",
+            """
+            UPDATE sessions
+            SET last_accessed = now()
+            WHERE id = $1
+              AND last_accessed > now() - make_interval(mins => $2)
+            RETURNING messages
+            """,
             session_id,
+            self._ttl_minutes,
         )
 
-        if row is None:
-            return None
+        if row is not None:
+            return _deserialize_messages(row["messages"])
 
-        if self._is_expired(row["last_accessed"]):
-            await pool.execute("DELETE FROM sessions WHERE id = $1", session_id)
+        # Either missing or expired — clean up expired row if it exists
+        result = await pool.execute(
+            "DELETE FROM sessions WHERE id = $1 AND last_accessed <= now() - make_interval(mins => $2)",
+            session_id,
+            self._ttl_minutes,
+        )
+        if result != "DELETE 0":
             logger.info("Session expired on access: %s", session_id)
-            return None
 
-        # Touch last_accessed
-        await pool.execute(
-            "UPDATE sessions SET last_accessed = now() WHERE id = $1",
-            session_id,
-        )
-
-        return _deserialize_messages(row["messages"])
+        return None
 
     async def update_messages(
         self, session_id: str, messages: list[ModelMessage]

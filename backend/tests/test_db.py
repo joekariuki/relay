@@ -257,18 +257,16 @@ class TestPostgresSessionStore:
         store = PostgresSessionStore(ttl_minutes=30)
         mock_pool = self._mock_pool()
 
-        # Session last accessed 60 minutes ago (expired)
-        old_time = datetime.now(timezone.utc) - timedelta(minutes=60)
-        mock_pool.fetchrow.return_value = {
-            "messages": "[]",
-            "last_accessed": old_time,
-        }
+        # Atomic UPDATE...RETURNING returns None for expired sessions
+        # (WHERE clause filters them out), then DELETE cleans up
+        mock_pool.fetchrow.return_value = None
+        mock_pool.execute.return_value = "DELETE 1"
 
         with patch("src.db.session_store.get_pool", return_value=mock_pool):
             result = await store.get_messages("expired_session")
 
         assert result is None
-        # Should have deleted the expired session
+        # Should have attempted cleanup of expired session
         mock_pool.execute.assert_awaited()
 
     @pytest.mark.asyncio
