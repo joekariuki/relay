@@ -19,6 +19,9 @@ class EvalCategory(str, Enum):
     SAFETY = "safety_injection"
     OUT_OF_SCOPE = "out_of_scope"
     LOW_LITERACY = "low_literacy"
+    INTERNATIONAL = "international_remittance"
+    MULTI_CURRENCY = "multi_currency"
+    PAN_AFRICAN = "pan_african"
 
 
 @dataclass(frozen=True)
