@@ -40,6 +40,113 @@ class KYCTier(str, Enum):
     PREMIUM = "premium"
 
 
+# === Multi-Currency Support ===
+
+# Static demo exchange rates — all expressed as units per 1 USD.
+DEMO_EXCHANGE_RATES: dict[str, float] = {
+    "XOF": 605.0,    # CFA Franc (WAEMU)
+    "NGN": 1550.0,   # Nigerian Naira
+    "GHS": 15.5,     # Ghanaian Cedi
+    "KES": 153.0,    # Kenyan Shilling
+    "TZS": 2650.0,   # Tanzanian Shilling
+    "ZAR": 18.5,     # South African Rand
+    "MAD": 10.0,     # Moroccan Dirham
+    "EGP": 50.0,     # Egyptian Pound
+    "GBP": 0.79,     # British Pound
+    "USD": 1.0,      # US Dollar
+}
+
+# Currency formatting rules: (symbol, position, decimal_places)
+# position: "prefix" means $100, "suffix" means 100 FCFA
+CURRENCY_FORMAT: dict[str, tuple[str, str, int]] = {
+    "XOF": ("FCFA", "suffix", 0),
+    "NGN": ("₦", "prefix", 0),
+    "GHS": ("GH₵", "prefix", 2),
+    "KES": ("KSh", "prefix", 0),
+    "TZS": ("TSh", "prefix", 0),
+    "ZAR": ("R", "prefix", 2),
+    "MAD": ("MAD", "suffix", 2),
+    "EGP": ("E£", "prefix", 2),
+    "GBP": ("£", "prefix", 2),
+    "USD": ("$", "prefix", 2),
+}
+
+
+def format_currency(amount: int | float, currency: str) -> str:
+    """Format an amount with the appropriate currency symbol and separators.
+
+    >>> format_currency(245000, "XOF")
+    '245,000 FCFA'
+    >>> format_currency(1200, "GBP")
+    '£1,200.00'
+    >>> format_currency(150000, "NGN")
+    '₦150,000'
+    """
+    symbol, position, decimals = CURRENCY_FORMAT.get(
+        currency, (currency, "suffix", 0)
+    )
+    if decimals > 0:
+        formatted = f"{amount:,.{decimals}f}"
+    else:
+        formatted = f"{int(amount):,}"
+    if position == "prefix":
+        return f"{symbol}{formatted}"
+    return f"{formatted} {symbol}"
+
+
+def convert_currency(
+    amount: float, from_currency: str, to_currency: str, spread: float = 0.01
+) -> tuple[float, float]:
+    """Convert an amount between currencies using demo exchange rates.
+
+    Args:
+        amount: Amount in the source currency.
+        from_currency: Source currency code.
+        to_currency: Target currency code.
+        spread: FX spread applied on top of the reference rate (default 1%).
+
+    Returns:
+        Tuple of (converted_amount, applied_rate) where applied_rate is the
+        effective rate from source to target currency (including spread).
+
+    Raises:
+        ValueError: If either currency code is unknown.
+    """
+    if from_currency == to_currency:
+        return (amount, 1.0)
+
+    from_rate = DEMO_EXCHANGE_RATES.get(from_currency)
+    to_rate = DEMO_EXCHANGE_RATES.get(to_currency)
+
+    if from_rate is None:
+        raise ValueError(f"Unknown currency: {from_currency}")
+    if to_rate is None:
+        raise ValueError(f"Unknown currency: {to_currency}")
+    if from_rate == 0:
+        raise ValueError(f"Exchange rate for {from_currency} is zero")
+
+    # Convert: source → USD → target, applying spread
+    mid_rate = to_rate / from_rate
+    applied_rate = mid_rate * (1 + spread)
+    converted = amount * applied_rate
+
+    return (round(converted, 2), round(applied_rate, 6))
+
+
+def normalize_to_usd(amount: float, currency: str) -> float:
+    """Convert an amount to USD equivalent for fee tier matching.
+
+    Raises:
+        ValueError: If the currency code is unknown.
+    """
+    rate = DEMO_EXCHANGE_RATES.get(currency)
+    if rate is None:
+        raise ValueError(f"Unknown currency: {currency}")
+    if rate == 0:
+        raise ValueError(f"Exchange rate for {currency} is zero")
+    return round(amount / rate, 2)
+
+
 class TicketPriority(str, Enum):
     """Support ticket priority levels."""
 

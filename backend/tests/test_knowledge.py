@@ -1,13 +1,20 @@
 """Tests for the knowledge/data layer."""
 
+import pytest
+
 from src.knowledge.accounts import ACCOUNTS, get_account, get_all_accounts, get_default_account_id
 from src.knowledge.agents_data import AGENT_LOCATIONS, find_agents
 from src.knowledge.fees import FEE_RULES, calculate_fee
 from src.knowledge.models import (
     Account,
+    CURRENCY_FORMAT,
+    DEMO_EXCHANGE_RATES,
     KYCTier,
     TransactionStatus,
     TransactionType,
+    convert_currency,
+    format_currency,
+    normalize_to_usd,
 )
 from src.knowledge.policies import POLICIES, get_policy, search_policies
 from src.knowledge.transactions import (
@@ -15,6 +22,99 @@ from src.knowledge.transactions import (
     get_transactions_for_account,
     lookup_transaction,
 )
+
+
+# === Multi-Currency Tests ===
+
+
+class TestExchangeRates:
+    def test_all_rates_positive(self) -> None:
+        for currency, rate in DEMO_EXCHANGE_RATES.items():
+            assert rate > 0, f"{currency} has non-positive rate: {rate}"
+
+    def test_usd_is_one(self) -> None:
+        assert DEMO_EXCHANGE_RATES["USD"] == 1.0
+
+    def test_known_currencies_exist(self) -> None:
+        expected = {"XOF", "NGN", "GHS", "KES", "TZS", "ZAR", "MAD", "EGP", "GBP", "USD"}
+        assert set(DEMO_EXCHANGE_RATES.keys()) == expected
+
+    def test_format_rules_match_rates(self) -> None:
+        assert set(CURRENCY_FORMAT.keys()) == set(DEMO_EXCHANGE_RATES.keys())
+
+
+class TestFormatCurrency:
+    def test_xof_suffix(self) -> None:
+        assert format_currency(245_000, "XOF") == "245,000 FCFA"
+
+    def test_gbp_prefix_decimals(self) -> None:
+        assert format_currency(1200, "GBP") == "£1,200.00"
+
+    def test_ngn_prefix_no_decimals(self) -> None:
+        assert format_currency(150_000, "NGN") == "₦150,000"
+
+    def test_usd_prefix_decimals(self) -> None:
+        assert format_currency(2800, "USD") == "$2,800.00"
+
+    def test_kes_prefix_no_decimals(self) -> None:
+        assert format_currency(45_000, "KES") == "KSh45,000"
+
+    def test_unknown_currency_fallback(self) -> None:
+        result = format_currency(100, "ZZZ")
+        assert "100" in result
+        assert "ZZZ" in result
+
+    def test_zero_amount(self) -> None:
+        assert format_currency(0, "XOF") == "0 FCFA"
+
+
+class TestConvertCurrency:
+    def test_same_currency_no_conversion(self) -> None:
+        amount, rate = convert_currency(1000, "XOF", "XOF")
+        assert amount == 1000
+        assert rate == 1.0
+
+    def test_xof_to_ngn(self) -> None:
+        amount, rate = convert_currency(605_000, "XOF", "NGN", spread=0.0)
+        # 605,000 XOF = 1000 USD = 1,550,000 NGN (at zero spread)
+        assert abs(amount - 1_550_000) < 1
+
+    def test_gbp_to_kes(self) -> None:
+        amount, rate = convert_currency(100, "GBP", "KES", spread=0.0)
+        # 100 GBP = ~126.58 USD = ~19,367 KES
+        assert amount > 19_000
+
+    def test_spread_increases_cost(self) -> None:
+        no_spread, _ = convert_currency(1000, "USD", "NGN", spread=0.0)
+        with_spread, _ = convert_currency(1000, "USD", "NGN", spread=0.01)
+        assert with_spread > no_spread
+
+    def test_unknown_from_currency_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown currency: ZZZ"):
+            convert_currency(100, "ZZZ", "USD")
+
+    def test_unknown_to_currency_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown currency: ZZZ"):
+            convert_currency(100, "USD", "ZZZ")
+
+
+class TestNormalizeToUsd:
+    def test_usd_unchanged(self) -> None:
+        assert normalize_to_usd(1000, "USD") == 1000.0
+
+    def test_xof_normalization(self) -> None:
+        # 605 XOF = 1 USD
+        result = normalize_to_usd(605, "XOF")
+        assert abs(result - 1.0) < 0.01
+
+    def test_gbp_normalization(self) -> None:
+        # 0.79 GBP = 1 USD, so 79 GBP ≈ 100 USD
+        result = normalize_to_usd(79, "GBP")
+        assert abs(result - 100.0) < 0.5
+
+    def test_unknown_currency_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown currency"):
+            normalize_to_usd(100, "ZZZ")
 
 
 # === Account Tests ===
