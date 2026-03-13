@@ -1,0 +1,80 @@
+name: CI Eval Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/src/**'
+      - 'backend/tests/**'
+      - '.github/workflows/eval.yml'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest tests/ -v --tb=short
+
+  eval:
+    name: Eval Gate
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run CI eval subset
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: uv run python -m src.eval.run_ci_eval
+
+      - name: Post eval results as PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = '${{ steps.eval.outcome }}' === 'success'
+              ? '## Eval Gate: PASSED\nAll CI eval thresholds met.'
+              : '## Eval Gate: FAILED\nOne or more CI eval thresholds were not met. Check the workflow logs for details.';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
