@@ -104,6 +104,7 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     environment: str
+    postgres: str | None = None
 
 
 # --- WebSocket Voice Mode Schemas ---

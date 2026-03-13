@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # Multi-agent settings
     use_multi_agent: bool = True
 
+    # PostgreSQL settings
+    use_postgres: bool = False
+    database_url: str | None = None
+
     # Eval judge model
     eval_model: str = "anthropic:claude-haiku-4-5-20251001"
 

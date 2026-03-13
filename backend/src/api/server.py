@@ -62,7 +62,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.info("RAG policy retrieval initialized")
         except Exception:
             logger.exception("Failed to initialize RAG — policy search will use keyword fallback")
+
+    # Initialize PostgreSQL if configured
+    if settings.use_postgres and settings.database_url:
+        try:
+            from src.db.connection import init_pool
+
+            await init_pool(settings.database_url)
+            logger.info("PostgreSQL persistence initialized")
+        except Exception:
+            logger.exception("Failed to initialize PostgreSQL — falling back to in-memory sessions")
+
     yield
+
+    # Cleanup
+    if settings.use_postgres and settings.database_url:
+        try:
+            from src.db.connection import close_pool
+
+            await close_pool()
+        except Exception:
+            logger.exception("Error closing PostgreSQL pool")
     logger.info("Shutting down Relay backend")
 
 
@@ -101,10 +121,18 @@ async def request_id_middleware(request: Request, call_next):  # type: ignore[no
 async def health() -> HealthResponse:
     """Health check endpoint."""
     settings = get_settings()
+    pg_status = None
+    if settings.use_postgres:
+        from src.db.connection import check_health
+
+        health_info = await check_health()
+        pg_status = str(health_info.get("postgres", "unknown"))
+
     return HealthResponse(
         status="ok",
         version=VERSION,
         environment=settings.environment,
+        postgres=pg_status,
     )
 
 
