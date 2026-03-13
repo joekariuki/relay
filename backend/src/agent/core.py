@@ -1,6 +1,18 @@
 """Core agent orchestration loop.
 
-Pipeline: guardrails -> language detection -> prompt selection -> pydantic-ai agent -> response.
+Pipeline: guardrails -> language detection -> intent classification -> agent selection -> response.
+
+Multi-agent routing (when use_multi_agent=True):
+    User message
+        |
+        v
+    GUARDRAILS -> LANGUAGE DETECTION -> CLASSIFY INTENT
+        |
+        v
+    SELECT AGENT: support (default) / fraud / escalation
+        |
+        v
+    RUN SPECIALIST with appropriate tool subset
 """
 
 from __future__ import annotations
@@ -23,6 +35,14 @@ from src.knowledge.models import AgentResponse, Language, ToolCallRecord
 
 from .formatting import clean_response_text, clean_text_chunk
 from .guardrails import check_guardrails
+from .orchestrator import (
+    ESCALATION_SYSTEM_PROMPT,
+    ESCALATION_TOOL_NAMES,
+    FRAUD_SYSTEM_PROMPT,
+    FRAUD_TOOL_NAMES,
+    AgentType,
+    classify_intent,
+)
 from .prompts import get_system_prompt
 from .router import LanguageDetectionResult, detect_language
 from .tools import execute_tool
@@ -83,6 +103,11 @@ _STAGE_STATUS_MESSAGES: dict[str, dict[str, str]] = {
         "en": "Processing",
         "fr": "Traitement en cours",
         "sw": "Inashughulikiwa",
+    },
+    "routing": {
+        "en": "Routing your request",
+        "fr": "Acheminement de votre demande",
+        "sw": "Kupeleka ombi lako",
     },
 }
 
@@ -255,13 +280,71 @@ SUPPORT_TOOLS = [
     create_support_ticket,
 ]
 
-# Module-level agent instance — model provided at run time via agent.run(model=...)
+# === Tool name -> function mapping for building specialist tool subsets ===
+_TOOL_BY_NAME: dict[str, Any] = {
+    "check_balance": check_balance,
+    "get_transactions": get_transactions,
+    "lookup_transaction": lookup_transaction,
+    "calculate_fees": calculate_fees,
+    "find_agent": find_agent,
+    "get_policy": get_policy,
+    "create_support_ticket": create_support_ticket,
+}
+
+# Module-level agent instances — model provided at run time via agent.run(model=...)
 support_agent = Agent(
     deps_type=AgentDeps,
     tools=SUPPORT_TOOLS,
     history_processors=[_cap_message_history],
 )
 support_agent.system_prompt(_build_system_prompt)
+
+# Fraud specialist: investigate suspicious activity + escalate
+fraud_agent = Agent(
+    deps_type=AgentDeps,
+    tools=[_TOOL_BY_NAME[name] for name in sorted(FRAUD_TOOL_NAMES)],
+    history_processors=[_cap_message_history],
+)
+
+
+def _build_fraud_prompt(ctx: RunContext[AgentDeps]) -> str:
+    account = get_account(ctx.deps.account_id)
+    return FRAUD_SYSTEM_PROMPT.format(
+        user_name=account.name if account else "Unknown",
+        account_id=ctx.deps.account_id,
+        user_country=account.country if account else "Unknown",
+        user_currency=account.currency if account else "XOF",
+    )
+
+
+fraud_agent.system_prompt(_build_fraud_prompt)
+
+# Escalation specialist: gather context + create high-priority tickets
+escalation_agent = Agent(
+    deps_type=AgentDeps,
+    tools=[_TOOL_BY_NAME[name] for name in sorted(ESCALATION_TOOL_NAMES)],
+    history_processors=[_cap_message_history],
+)
+
+
+def _build_escalation_prompt(ctx: RunContext[AgentDeps]) -> str:
+    account = get_account(ctx.deps.account_id)
+    return ESCALATION_SYSTEM_PROMPT.format(
+        user_name=account.name if account else "Unknown",
+        account_id=ctx.deps.account_id,
+        user_country=account.country if account else "Unknown",
+        user_currency=account.currency if account else "XOF",
+    )
+
+
+escalation_agent.system_prompt(_build_escalation_prompt)
+
+# Agent registry for routing
+AGENTS: dict[AgentType, Agent[AgentDeps, str]] = {
+    AgentType.SUPPORT: support_agent,
+    AgentType.FRAUD: fraud_agent,
+    AgentType.ESCALATION: escalation_agent,
+}
 
 
 def _language_code_to_enum(code: str) -> Language:
@@ -327,12 +410,24 @@ async def process_message(
     metadata["language_confidence"] = lang_result.confidence
     metadata["code_switching"] = lang_result.code_switching
 
-    # === Stage 3: Run Agent ===
+    # === Stage 3: Intent Classification (multi-agent) ===
+    agent_type = AgentType.SUPPORT
+    if settings.use_multi_agent:
+        t_classify = time.perf_counter()
+        classification = await classify_intent(message)
+        latency["classification_ms"] = (time.perf_counter() - t_classify) * 1000
+        agent_type = classification.agent_type
+        metadata["agent_type"] = agent_type.value
+        metadata["classification_confidence"] = classification.confidence
+
+    selected_agent = AGENTS.get(agent_type, support_agent)
+
+    # === Stage 4: Run Agent ===
     t2 = time.perf_counter()
     deps = AgentDeps(account_id=account_id, language=lang_result.language)
 
     try:
-        result = await support_agent.run(
+        result = await selected_agent.run(
             message,
             deps=deps,
             model=settings.agent_model,
@@ -431,14 +526,29 @@ async def stream_agent_response(
 
         latency["language_detection_ms"] = (time.perf_counter() - t1) * 1000
 
-        # === Stage 3: Stream Agent Response ===
+        lang = lang_result.language
+
+        # === Stage 3: Intent Classification (multi-agent) ===
+        agent_type = AgentType.SUPPORT
+        if settings.use_multi_agent:
+            yield StreamEvent("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["routing"], lang)})
+            t_classify = time.perf_counter()
+            classification = await classify_intent(message)
+            latency["classification_ms"] = (time.perf_counter() - t_classify) * 1000
+            agent_type = classification.agent_type
+
+            if agent_type != AgentType.SUPPORT:
+                yield StreamEvent("agent_routed", {"agent": agent_type.value})
+
+        selected_agent = AGENTS.get(agent_type, support_agent)
+
+        # === Stage 4: Stream Agent Response ===
         t2 = time.perf_counter()
         deps = AgentDeps(account_id=account_id, language=lang_result.language)
-        lang = lang_result.language
 
         yield StreamEvent("status", {"message": _get_status(_STAGE_STATUS_MESSAGES["analyzing"], lang)})
 
-        async with support_agent.iter(
+        async with selected_agent.iter(
             message,
             deps=deps,
             model=settings.agent_model,
@@ -450,13 +560,13 @@ async def stream_agent_response(
         ) as agent_run:
             node = agent_run.next_node
             while not isinstance(node, End):
-                if support_agent.is_model_request_node(node):
+                if selected_agent.is_model_request_node(node):
                     async with node.stream(agent_run.ctx) as stream:
                         async for chunk in stream.stream_text(delta=True, debounce_by=None):
                             cleaned = clean_text_chunk(chunk)
                             if cleaned:
                                 yield StreamEvent("text_delta", {"chunk": cleaned})
-                elif support_agent.is_call_tools_node(node):
+                elif selected_agent.is_call_tools_node(node):
                     for tc in node.model_response.tool_calls:
                         tool_msgs = _TOOL_STATUS_MESSAGES.get(tc.tool_name)
                         msg = _get_status(tool_msgs, lang) if tool_msgs else _get_status(_STAGE_STATUS_MESSAGES["processing"], lang)
@@ -481,6 +591,7 @@ async def stream_agent_response(
 
         yield StreamEvent("done", {
             "language_detected": lang_result.language,
+            "agent_type": agent_type.value,
             "tools_used": tools_info,
             "groundedness_score": None,
             "latency_ms": latency,

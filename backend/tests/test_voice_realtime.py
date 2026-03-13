@@ -308,6 +308,18 @@ class TestVoiceSessionIntegration:
 
 
 class TestStreamAgentResponse:
+
+    def _mock_settings(self) -> MagicMock:
+        """Create a mock Settings with use_multi_agent=False to skip classification."""
+        settings = MagicMock()
+        settings.use_multi_agent = False
+        settings.language_detection_timeout_s = 2.0
+        settings.language_detection_model = "test-model"
+        settings.agent_model = "test-model"
+        settings.agent_max_tokens = 100
+        settings.agent_max_tool_rounds = 3
+        return settings
+
     @pytest.mark.asyncio
     async def test_yields_status_events(self) -> None:
         from pydantic_graph import End
@@ -318,8 +330,10 @@ class TestStreamAgentResponse:
 
         with patch("src.agent.core.check_guardrails") as mock_guard, \
              patch("src.agent.core.detect_language", new_callable=AsyncMock) as mock_lang, \
+             patch("src.agent.core.get_settings") as mock_get_settings, \
              patch("src.agent.core.support_agent") as mock_agent:
 
+            mock_get_settings.return_value = self._mock_settings()
             mock_guard.return_value = MagicMock(
                 safe=True, injection_detected=False, flags=[]
             )
@@ -341,12 +355,14 @@ class TestStreamAgentResponse:
             mock_ctx_manager.__aexit__ = AsyncMock(return_value=False)
             mock_agent.iter.return_value = mock_ctx_manager
 
-            ctx = StreamContext()
-            async for event in stream_agent_response(
-                message="What is my balance?",
-                stream_context=ctx,
-            ):
-                events.append(event)
+            from src.agent.orchestrator import AgentType
+            with patch.dict("src.agent.core.AGENTS", {AgentType.SUPPORT: mock_agent}):
+                ctx = StreamContext()
+                async for event in stream_agent_response(
+                    message="What is my balance?",
+                    stream_context=ctx,
+                ):
+                    events.append(event)
 
         event_types = [e.type for e in events]
         assert "status" in event_types
@@ -360,8 +376,10 @@ class TestStreamAgentResponse:
 
         with patch("src.agent.core.check_guardrails") as mock_guard, \
              patch("src.agent.core.detect_language", new_callable=AsyncMock) as mock_lang, \
+             patch("src.agent.core.get_settings") as mock_get_settings, \
              patch("src.agent.core.support_agent") as mock_agent:
 
+            mock_get_settings.return_value = self._mock_settings()
             mock_guard.return_value = MagicMock(
                 safe=True, injection_detected=False, flags=[]
             )
@@ -383,12 +401,14 @@ class TestStreamAgentResponse:
             mock_ctx_manager.__aexit__ = AsyncMock(return_value=False)
             mock_agent.iter.return_value = mock_ctx_manager
 
-            ctx = StreamContext()
-            async for _ in stream_agent_response(
-                message="Test",
-                stream_context=ctx,
-            ):
-                pass
+            from src.agent.orchestrator import AgentType
+            with patch.dict("src.agent.core.AGENTS", {AgentType.SUPPORT: mock_agent}):
+                ctx = StreamContext()
+                async for _ in stream_agent_response(
+                    message="Test",
+                    stream_context=ctx,
+                ):
+                    pass
 
         assert len(ctx.all_messages) == 2
 
@@ -414,8 +434,10 @@ class TestStreamAgentResponse:
 
         with patch("src.agent.core.check_guardrails") as mock_guard, \
              patch("src.agent.core.detect_language", new_callable=AsyncMock) as mock_lang, \
+             patch("src.agent.core.get_settings") as mock_get_settings, \
              patch("src.agent.core.support_agent") as mock_agent:
 
+            mock_get_settings.return_value = self._mock_settings()
             mock_guard.return_value = MagicMock(
                 safe=True, injection_detected=False, flags=[]
             )
@@ -463,12 +485,14 @@ class TestStreamAgentResponse:
             mock_ctx_manager.__aexit__ = AsyncMock(return_value=False)
             mock_agent.iter.return_value = mock_ctx_manager
 
-            ctx = StreamContext()
-            async for event in stream_agent_response(
-                message="What is my balance?",
-                stream_context=ctx,
-            ):
-                events.append(event)
+            from src.agent.orchestrator import AgentType
+            with patch.dict("src.agent.core.AGENTS", {AgentType.SUPPORT: mock_agent}):
+                ctx = StreamContext()
+                async for event in stream_agent_response(
+                    message="What is my balance?",
+                    stream_context=ctx,
+                ):
+                    events.append(event)
 
         # Should have multiple text_delta events (one per chunk)
         text_deltas = [e for e in events if e.type == "text_delta"]
@@ -488,8 +512,10 @@ class TestStreamAgentResponse:
 
         with patch("src.agent.core.check_guardrails") as mock_guard, \
              patch("src.agent.core.detect_language", new_callable=AsyncMock) as mock_lang, \
+             patch("src.agent.core.get_settings") as mock_get_settings, \
              patch("src.agent.core.support_agent") as mock_agent:
 
+            mock_get_settings.return_value = self._mock_settings()
             mock_guard.return_value = MagicMock(
                 safe=True, injection_detected=False, flags=[]
             )
@@ -535,8 +561,10 @@ class TestStreamAgentResponse:
             mock_ctx_manager.__aexit__ = AsyncMock(return_value=False)
             mock_agent.iter.return_value = mock_ctx_manager
 
-            async for event in stream_agent_response(message="Hi"):
-                events.append(event)
+            from src.agent.orchestrator import AgentType
+            with patch.dict("src.agent.core.AGENTS", {AgentType.SUPPORT: mock_agent}):
+                async for event in stream_agent_response(message="Hi"):
+                    events.append(event)
 
         text_deltas = [e for e in events if e.type == "text_delta"]
         assert len(text_deltas) == 3
