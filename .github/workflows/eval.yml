@@ -57,6 +57,7 @@ jobs:
         run: uv sync
 
       - name: Run CI eval subset
+        id: eval
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
